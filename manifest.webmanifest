@@ -1,0 +1,17 @@
+{
+  "name": "WannaTalk 영어회화",
+  "short_name": "WannaTalk",
+  "description": "천천히, 쉽게 배우는 하루 15분 영어회화",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F3F6FA",
+  "theme_color": "#0B4F9E",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
