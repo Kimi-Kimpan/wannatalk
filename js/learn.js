@@ -50,7 +50,7 @@ async function loadPack(day) {
 }
 
 async function startDay({ day, review = false }) {
-  loading('Emma 선생님이 오늘 공부를 준비하고 있어요…');
+  loading('클라우디아 선생님이 오늘 공부를 준비하고 있어요…');
   const slow = setTimeout(() => {
     const p = document.querySelector('.screen .lead');
     if (p) p.textContent = '조금만 기다려 주세요. 새 공부를 만들 때는 30초쯤 걸려요…';
@@ -101,7 +101,7 @@ function bindQuit() { on('quit', () => go('home')); }
 function say(text, S, btnId = 'play', slow = false) {
   return speak(text, { rate: slow ? 0.55 : S.rate, button: $(btnId), natural: true });
 }
-// Emma 목소리로 말하기
+// Klaudia 목소리로 말하기
 function emma(text, S) {
   return speak(text, { rate: S.rate, natural: true });
 }
@@ -224,7 +224,7 @@ async function letterStep(S) {
   }
 
   async function polish(draft) {
-    loading('Emma 선생님이 답장을 봐 주고 있어요…');
+    loading('클라우디아 선생님이 답장을 봐 주고 있어요…');
     let r;
     try {
       r = await api.ai('polish', { letter: L.body, draft, level: S.level });
@@ -446,7 +446,7 @@ function qaStep(S) {
 
   async function answered(q, text, how, ko = '') {
     $('area').innerHTML = `<div class="msg-me"><span class="who">나</span><span lang="en">${esc(text)}</span></div>
-      <p class="hint">Emma 선생님이 듣고 있어요…</p>`;
+      <p class="hint">클라우디아 선생님이 듣고 있어요…</p>`;
     let r;
     if (how === 'choice') {
       const c = CHEERS[Math.floor(Math.random() * CHEERS.length)];
@@ -491,11 +491,11 @@ function qaStep(S) {
 
 // 5. 3분 대화 -------------------------------------------------------------------------
 const FIRST_HELP = {
-  1: ['Hello, Emma!', '안녕하세요, 엠마!'],
-  2: ["Hi, Emma. I'm fine, thank you.", '안녕하세요, 엠마. 잘 지내요, 고마워요.'],
-  3: ["Hi, Emma! I'm good. How are you?", '안녕하세요, 엠마! 잘 지내요. 당신은요?'],
-  4: ["Hi, Emma! I'm doing well. It's nice to talk with you.", '안녕하세요, 엠마! 잘 지내요. 이야기하게 되어 좋아요.'],
-  5: ["Hi, Emma! I'm doing well, thanks. I had a busy day today.", '안녕하세요, 엠마! 잘 지내요. 오늘은 바쁜 하루였어요.'],
+  1: ['Hello, Klaudia!', '안녕하세요, 클라우디아!'],
+  2: ["Hi, Klaudia. I'm fine, thank you.", '안녕하세요, 클라우디아. 잘 지내요, 고마워요.'],
+  3: ["Hi, Klaudia! I'm good. How are you?", '안녕하세요, 클라우디아! 잘 지내요. 당신은요?'],
+  4: ["Hi, Klaudia! I'm doing well. It's nice to talk with you.", '안녕하세요, 클라우디아! 잘 지내요. 이야기하게 되어 좋아요.'],
+  5: ["Hi, Klaudia! I'm doing well, thanks. I had a busy day today.", '안녕하세요, 클라우디아! 잘 지내요. 오늘은 바쁜 하루였어요.'],
 };
 
 function talkStep(S) {
@@ -511,7 +511,7 @@ function talkStep(S) {
     <div class="talk-top">
       ${avatar('sm')}
       <div class="talk-info">
-        <p class="scene">${esc(t.scene_ko || 'Emma 선생님과 이야기해요.')}</p>
+        <p class="scene">${esc(t.scene_ko || '클라우디아 선생님과 이야기해요.')}</p>
         <p class="timer" id="timer">남은 시간 ${fmt(left)}</p>
       </div>
     </div>
@@ -530,7 +530,7 @@ function talkStep(S) {
   bindQuit();
 
   function fmt(s) { return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
-  function lastEmma() { for (let i = history.length - 1; i >= 0; i--) if (history[i].role === 'emma') return history[i]; return null; }
+  function lastKlaudia() { for (let i = history.length - 1; i >= 0; i--) if (history[i].role === 'emma') return history[i]; return null; }
   function renderLog() {
     const log = $('log');
     if (!log) return;
@@ -549,14 +549,14 @@ function talkStep(S) {
     history.push({ role: 'me', en: text });
     S.score.talk++;
     renderLog();
-    setHint('Emma 선생님이 생각하고 있어요…');
+    setHint('클라우디아 선생님이 생각하고 있어요…');
     try {
       const r = await api.ai('chat', {
         topic: S.topic, level: S.level, scene: t.scene_ko, notes: S.notes,
         history: history.map(({ role, en }) => ({ role, en })),
       });
       if (r.fix_en && !sameSentence(r.fix_en, text)) history[history.length - 1].fix = r.fix_en;
-      save(S, { kind: 'talk', prompt_en: (lastEmma() || {}).en, answer_en: text, better_en: r.fix_en || '', answer_ko: r.said_ko || '' });
+      save(S, { kind: 'talk', prompt_en: (lastKlaudia() || {}).en, answer_en: text, better_en: r.fix_en || '', answer_ko: r.said_ko || '' });
       if (r.en) history.push({ role: 'emma', en: r.en, ko: r.ko || '' });
       if (r.help_en) help = { en: r.help_en, ko: r.help_ko || '' };
       api.addNotes(r.facts, S.topic).catch(() => {});
@@ -585,7 +585,7 @@ function talkStep(S) {
     if (state.timer) { clearInterval(state.timer); state.timer = null; }
     $('helpBox').innerHTML = '';
     $('controls').innerHTML = '';
-    setHint('시간이 다 됐어요. Emma 선생님이 인사하고 있어요…');
+    setHint('시간이 다 됐어요. 클라우디아 선생님이 인사하고 있어요…');
     let bye = { en: 'It was so nice talking with you. See you tomorrow!', ko: '이야기해서 정말 좋았어요. 내일 또 만나요!' };
     try {
       const r = await api.ai('chat', { topic: S.topic, level: S.level, scene: t.scene_ko, notes: S.notes, ending: true, history: history.map(({ role, en }) => ({ role, en })) });
@@ -600,7 +600,7 @@ function talkStep(S) {
     emma(bye.en, S);
   }
 
-  on('again', () => { const m = lastEmma(); if (m) emma(m.en, S); });
+  on('again', () => { const m = lastKlaudia(); if (m) emma(m.en, S); });
   on('help', () => {
     $('helpBox').innerHTML = `<div class="better">
       <p class="label">이렇게 말해 보세요</p>

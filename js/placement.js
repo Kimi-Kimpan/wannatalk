@@ -131,7 +131,7 @@ register('placement', () => {
       <h1>수고하셨어요!</h1>
       <p class="lead">${skipped && i < items.length ? '1단계부터 차근차근 시작해요.' : `<b>${level}단계</b>부터 시작해요.`}</p>
       <p class="muted">${esc(LEVEL_NAMES[level])}</p>
-      <p>매일 Emma 선생님이 묻는 말에 대답하면서 배워요.<br>10일마다 실력을 보고 단계를 올려 드려요.</p>
+      <p>매일 클라우디아 선생님이 묻는 말에 대답하면서 배워요.<br>10일마다 실력을 보고 단계를 올려 드려요.</p>
       <button class="big primary" id="home" type="button">시작하기</button>
     </section>`);
     on('home', () => go('home'));

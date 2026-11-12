@@ -136,7 +136,7 @@ async function gemini(system: string, prompt: string, temperature = 0.7, maxToke
 async function makePack(b: any) {
   const level = levelOf(b.level);
   const topic = TOPICS[b.topic] ? b.topic : "me";
-  const system = `You are Emma, a friendly English conversation teacher. ${LEARNER} Reply with JSON only.`;
+  const system = `You are Klaudia, a friendly English conversation teacher. ${LEARNER} Reply with JSON only.`;
   const prompt = `Create today's English lesson.
 
 Topic: ${TOPICS[topic]}
@@ -152,10 +152,10 @@ Return JSON with exactly this shape:
   "title_ko": "short Korean title for today's lesson (max 14 characters)",
   "cards": [ {"en": "...", "ko": "...", "say": "..."} ],            // 6 useful sentences HE can say about this topic, first person, matching the level
   "words": [ {"en": "...", "ko": "...", "say": "...", "emoji": "one emoji"} ], // 10 words for this topic; pick words he will need for the questions
-  "questions": [                                                         // 5 questions Emma asks him, from easy to slightly deeper
+  "questions": [                                                         // 5 questions Klaudia asks him, from easy to slightly deeper
     {"en": "...", "ko": "...", "choices": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]}
   ],
-  "talk": {"scene_ko": "one Korean sentence describing the 3-minute chat scene", "opener_en": "Emma's first line", "opener_ko": "Korean meaning"}
+  "talk": {"scene_ko": "one Korean sentence describing the 3-minute chat scene", "opener_en": "Klaudia's first line", "opener_ko": "Korean meaning"}
 }
 Rules:
 - ${SAY_RULE}
@@ -168,15 +168,15 @@ Rules:
 // 묻고 답하기: 대답 확인
 async function checkAnswer(b: any) {
   const level = levelOf(b.level);
-  const system = `You are Emma, a kind English teacher. ${LEARNER} Reply with JSON only.`;
-  const prompt = `Emma asked: "${clip(b.question, 300)}"
+  const system = `You are Klaudia, a kind English teacher. ${LEARNER} Reply with JSON only.`;
+  const prompt = `Klaudia asked: "${clip(b.question, 300)}"
 The learner answered (from speech recognition or tapping, may have errors): "${clip(b.answer, 300)}"
 ${LEVELS[level]}
 
 Return JSON:
 {
   "good": true or false,          // true if the meaning is understandable, even with small mistakes
-  "reply_en": "Emma's short warm reaction (max 12 words), may include a tiny follow-up",
+  "reply_en": "Klaudia's short warm reaction (max 12 words), may include a tiny follow-up",
   "reply_ko": "Korean meaning of reply_en",
   "better_en": "a natural, correct version of what he meant, at his level",
   "better_ko": "Korean meaning",
@@ -193,10 +193,10 @@ async function chatTurn(b: any) {
   const topic = TOPICS[b.topic] ? b.topic : "me";
   const history = Array.isArray(b.history) ? b.history.slice(-12) : [];
   const transcript = history
-    .map((m: any) => `${m.role === "me" ? "Learner" : "Emma"}: ${clip(m.en, 300)}`)
+    .map((m: any) => `${m.role === "me" ? "Learner" : "Klaudia"}: ${clip(m.en, 300)}`)
     .join("\n");
   const system =
-    `You are Emma, a warm English conversation partner in a short spoken chat. ${LEARNER} ` +
+    `You are Klaudia, a warm English conversation partner in a short spoken chat. ${LEARNER} ` +
     `Speak simply. Ask one question at a time. Keep each line under 20 words. Reply with JSON only.`;
   const prompt = `Scene: ${clip(b.scene, 200)}
 Topic: ${TOPICS[topic]}
@@ -207,11 +207,11 @@ ${notesText(Array.isArray(b.notes) ? b.notes.slice(0, 15) : [])}
 Conversation so far:
 ${transcript || "(none)"}
 
-${b.ending ? "Time is up. Close the chat kindly in one or two short lines and say goodbye. Do not ask a question." : "Continue the conversation with Emma's next line."}
+${b.ending ? "Time is up. Close the chat kindly in one or two short lines and say goodbye. Do not ask a question." : "Continue the conversation with Klaudia's next line."}
 
 Return JSON:
 {
-  "en": "Emma's next line",
+  "en": "Klaudia's next line",
   "ko": "Korean meaning",
   "fix_en": "if the learner's LAST line had a clear mistake, a corrected natural version; otherwise empty string",
   "help_en": "a simple answer the learner could say next, at his level (empty if ending)",
@@ -245,7 +245,7 @@ Rules: ${SAY_RULE}`;
 // 답장 다듬기
 async function polishReply(b: any) {
   const level = levelOf(b.level);
-  const system = `You are Emma, a kind English teacher helping a learner write a reply to family. ${LEARNER} Reply with JSON only.`;
+  const system = `You are Klaudia, a kind English teacher helping a learner write a reply to family. ${LEARNER} Reply with JSON only.`;
   const prompt = `The message he received:
 """${clip(b.letter, 1500)}"""
 His draft reply: "${clip(b.draft, 600)}"

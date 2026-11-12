@@ -40,11 +40,11 @@ export async function ai(action, payload = {}) {
 
 export function aiMessage(e) {
   const code = e && e.code;
-  if (code === 'busy') return 'Emma 선생님이 잠깐 쉬는 중이에요. 1분 뒤에 다시 눌러 주세요.';
+  if (code === 'busy') return '클라우디아 선생님이 잠깐 쉬는 중이에요. 1분 뒤에 다시 눌러 주세요.';
   if (code === 'network') return '인터넷 연결을 확인하고 다시 눌러 주세요.';
   if (code === 'auth') return '다시 로그인해 주세요.';
-  if (code === 'timeout') return 'Emma 선생님 대답이 너무 늦어요. 잠시 뒤 다시 눌러 주세요.';
-  return 'Emma 선생님과 연결이 잘 안 돼요. 잠시 뒤 다시 눌러 주세요.';
+  if (code === 'timeout') return '클라우디아 선생님 대답이 너무 늦어요. 잠시 뒤 다시 눌러 주세요.';
+  return '클라우디아 선생님과 연결이 잘 안 돼요. 잠시 뒤 다시 눌러 주세요.';
 }
 
 // 로그인 -------------------------------------------------------------------------

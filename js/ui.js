@@ -72,7 +72,7 @@ export function topBar(label, ratio, quitText = '처음으로') {
   <div class="progress" aria-hidden="true"><span style="width:${Math.round(Math.max(0, Math.min(1, ratio)) * 100)}%"></span></div>`;
 }
 
-// Emma 선생님 그림 (직접 그린 단순한 캐릭터)
+// 클라우디아 선생님 그림 (직접 그린 단순한 캐릭터)
 export function avatar(size = 'md') {
   return `<div class="avatar ${size}" aria-hidden="true">
   <svg viewBox="0 0 120 120">

@@ -175,7 +175,7 @@ input.code { font-family: var(--font-en); font-size: 34px; letter-spacing: 8px; 
 .letter-item.mine { border-left-color: var(--primary); }
 .letter-item .from { font-size: 16px; font-weight: 700; }
 
-/* Emma 선생님 */
+/* Klaudia 선생님 */
 .emma-row { display: flex; gap: 14px; align-items: flex-start; }
 .avatar { flex: none; width: 96px; height: 96px; }
 .avatar.sm { width: 72px; height: 72px; }
