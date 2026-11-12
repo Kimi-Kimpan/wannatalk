@@ -17,7 +17,7 @@
 | 부분 | 쓰는 것 |
 |---|---|
 | 화면 | GitHub Pages (이 저장소 그대로, 빌드 없음) |
-| 로그인·진도·편지 | Supabase (이메일 6자리 번호 로그인) |
+| 로그인·진도·편지 | Supabase (메일 속 링크로 로그인) |
 | AI 선생님 | Supabase Edge Function `tutor` → Gemini API |
 | 듣기·말하기 | 크롬 내장 음성 기능 |
 
@@ -30,8 +30,7 @@ supabase/functions/tutor/    AI 선생님 서버 코드
 
 ## 처음 설정 순서
 1. **데이터베이스**: Supabase > SQL Editor > New query 에 `supabase/schema.sql` 전체를 붙여넣고 Run.
-2. **로그인 메일**: Authentication > Emails(Email Templates) > *Magic Link* 템플릿 본문에 `{{ .Token }}` 을 넣습니다.
-   예: `<h2>WannaTalk 로그인 번호</h2><p style="font-size:28px"><b>{{ .Token }}</b></p>`
+2. **로그인 주소**: Authentication > URL Configuration 의 Site URL 을 `https://kimi-kimpan.github.io/wannatalk/` 로 둡니다. (메일 속 링크가 이 주소로 돌아옵니다)
 3. **AI 서버**: Edge Functions > Deploy a new function > Via Editor, 이름 `tutor`,
    `supabase/functions/tutor/index.ts` 내용을 붙여넣고 Deploy.
 4. **Gemini 키**: Edge Functions > Secrets 에 `GEMINI_API_KEY` 추가. (모델을 바꾸려면 `GEMINI_MODEL` 도 추가)

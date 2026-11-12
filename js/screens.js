@@ -18,9 +18,9 @@ register('login', () => {
         <label for="email">이메일 주소</label>
         <input id="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" value="${esc(email)}" placeholder="name@example.com">
         <p class="msg" id="msg" role="alert">${esc(msg)}</p>
-        <button class="big primary" type="submit" id="send">번호 받기 <small lang="en">Get code</small></button>
+        <button class="big primary" type="submit" id="send">로그인 메일 받기 <small lang="en">Email me a sign-in link</small></button>
       </form>
-      <p class="note">메일로 6자리 번호를 보내 드려요. 한 번 로그인하면 다음부터는 바로 열려요.</p>
+      <p class="note">메일로 로그인 링크를 보내 드려요. 한 번 로그인하면 다음부터는 바로 열려요.</p>
     </section>`);
     $('f').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -44,38 +44,27 @@ register('login', () => {
   function stepCode(msg = '') {
     mount(`<section class="screen">
       <div class="brand">WannaTalk</div>
-      <h1>메일로 받은 번호를 적어 주세요</h1>
-      <p class="sub">${esc(email)} <span lang="en">· Enter the code from your email</span></p>
-      <form id="f" class="form" novalidate>
-        <label for="code">번호</label>
-        <input id="code" class="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456">
-        <p class="msg" id="msg" role="alert">${esc(msg)}</p>
-        <button class="big primary" type="submit" id="ok">확인 <small lang="en">Continue</small></button>
-      </form>
+      <h1>메일함을 열어 주세요</h1>
+      <p class="sub">${esc(email)} <span lang="en">· Check your email</span></p>
+      <div class="panel">
+        <p class="lead">메일 속 <b lang="en">Sign in</b> 글자를 누르면 바로 로그인돼요.</p>
+        <p class="muted" lang="en">Tap “Sign in” in the email we just sent.</p>
+      </div>
+      <p class="msg" id="msg" role="alert">${esc(msg)}</p>
+      <button class="big primary" id="ok" type="button">로그인했어요 <small lang="en">I've signed in</small></button>
       <div class="row">
-        <button class="plain mid" id="again" type="button">번호 다시 받기</button>
+        <button class="plain mid" id="again" type="button">메일 다시 받기</button>
         <button class="plain mid" id="change" type="button">이메일 바꾸기</button>
       </div>
-      <p class="note">메일이 안 보이면 스팸함도 확인해 주세요.</p>
+      <p class="note">메일이 안 보이면 스팸함도 확인해 주세요. 메일은 몇 분에 한 번만 보낼 수 있어요.</p>
     </section>`);
-    $('code').focus();
-    $('f').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const code = $('code').value.replace(/\D/g, '');
-      if (code.length < 6) { $('msg').textContent = '번호를 끝까지 적어 주세요.'; return; }
-      $('ok').disabled = true;
-      $('msg').textContent = '확인하는 중이에요…';
-      try {
-        const session = await api.verifyCode(email, code);
-        state.user = session.user;
-        boot();
-      } catch (err) {
-        $('ok').disabled = false;
-        $('msg').textContent = '번호가 맞지 않아요. 메일의 번호를 다시 확인해 주세요.';
-      }
+    on('ok', async () => {
+      const u = await api.currentUser();
+      if (u) { state.user = u; boot(); }
+      else $('msg').textContent = '아직 로그인되지 않았어요. 메일 속 Sign in 을 먼저 눌러 주세요.';
     });
     on('again', async () => {
-      try { await api.sendCode(email); stepCode('새 번호를 보냈어요.'); }
+      try { await api.sendCode(email); stepCode('새 메일을 보냈어요.'); }
       catch (err) { stepCode('잠시 뒤에 다시 눌러 주세요.'); }
     });
     on('change', () => stepEmail());

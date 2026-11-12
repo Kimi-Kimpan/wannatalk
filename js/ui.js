@@ -10,6 +10,7 @@ export function go(name, arg) {
   stopListening();
   if (state.timer) { clearInterval(state.timer); state.timer = null; }
   window.scrollTo(0, 0);
+  state.screen = name;
   return screens[name](arg);
 }
 

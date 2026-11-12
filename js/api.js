@@ -6,7 +6,7 @@ export const configured = /^https:\/\/.+\.supabase\.co\/?$/.test(SUPABASE_URL) &
 
 export const sb = configured
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
     })
   : null;
 
@@ -41,7 +41,8 @@ export function aiMessage(e) {
 
 // 로그인 -------------------------------------------------------------------------
 export async function sendCode(email) {
-  const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+  const back = location.origin + location.pathname;
+  const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: back } });
   if (error) throw error;
 }
 export async function verifyCode(email, token) {

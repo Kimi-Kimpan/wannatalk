@@ -228,6 +228,22 @@ Return JSON:
   return await gemini(system, prompt, 0.4);
 }
 
+// 프로젝트 키 찾기 (예전 anon 키 / 새 publishable 키 모두 지원)
+function projectKey(): string | undefined {
+  const direct = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
+  if (direct) return direct;
+  for (const name of ["SUPABASE_PUBLISHABLE_KEYS", "SUPABASE_SECRET_KEYS"]) {
+    const raw = Deno.env.get(name);
+    if (!raw) continue;
+    try {
+      const obj = JSON.parse(raw);
+      const first = Object.values(obj)[0];
+      if (typeof first === "string") return first;
+    } catch { /* 무시 */ }
+  }
+  return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || undefined;
+}
+
 // ---------------------------------------------------------------------------
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -235,11 +251,11 @@ Deno.serve(async (req) => {
 
   // 로그인한 사용자만 사용할 수 있습니다.
   const url = Deno.env.get("SUPABASE_URL");
-  const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
-  const auth = req.headers.get("Authorization") ?? "";
-  if (!url || !anon || !auth) return json({ error: "unauthorized" }, 401);
-  const sb = createClient(url, anon, { global: { headers: { Authorization: auth } } });
-  const { data: { user } } = await sb.auth.getUser();
+  const key = projectKey();
+  const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  if (!url || !key || !token) return json({ error: "unauthorized" }, 401);
+  const sb = createClient(url, key, { auth: { persistSession: false } });
+  const { data: { user } } = await sb.auth.getUser(token);
   if (!user) return json({ error: "unauthorized" }, 401);
 
   let b: any;

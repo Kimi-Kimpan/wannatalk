@@ -29,6 +29,7 @@ if (!configured) {
 } else {
   sb.auth.onAuthStateChange((event) => {
     if (event === 'SIGNED_OUT') { state.user = null; state.profile = null; go('login'); }
+    if (event === 'SIGNED_IN' && state.screen === 'login') { state.screen = null; setTimeout(boot, 0); }
   });
   boot();
 }
