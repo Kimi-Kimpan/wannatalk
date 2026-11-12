@@ -126,6 +126,8 @@ input.code { font-family: var(--font-en); font-size: 34px; letter-spacing: 8px; 
 .listen { flex: 2; min-height: 84px; border-radius: 20px; background: var(--listen); color: var(--listen-ink); font-size: 28px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 12px; box-shadow: 0 4px 0 rgba(0,0,0,.2); }
 .listen svg { width: 34px; height: 34px; }
 .screen > .listen { flex: none; }
+.listen.loading, .ghost.loading { opacity: .65; }
+.admin-link { text-decoration: none; color: inherit; margin-bottom: 10px; }
 .listen.playing { outline: 5px solid var(--primary); outline-offset: 3px; }
 .slow { flex: 1; min-height: 84px; border-radius: 20px; background: var(--card); border: 3px solid var(--listen); font-size: 21px; font-weight: 700; line-height: 1.2; }
 .mic { min-height: 76px; border-radius: 20px; background: var(--card); border: 3px solid var(--primary); color: var(--primary); font-size: 25px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px; }

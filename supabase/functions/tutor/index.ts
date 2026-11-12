@@ -85,7 +85,7 @@ async function callGemini(model: string, key: string, body: unknown, ms: number)
 // 붐비면(503) 다음 모델로 넘어갑니다.
 const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"];
 
-async function gemini(system: string, prompt: string, temperature = 0.7): Promise<any> {
+async function gemini(system: string, prompt: string, temperature = 0.7, maxTokens = 4096): Promise<any> {
   const key = Deno.env.get("GEMINI_API_KEY");
   if (!key) throw new GeminiError(500, "GEMINI_API_KEY is not set");
   const first = Deno.env.get("GEMINI_MODEL") || FALLBACK_MODELS[0];
@@ -95,7 +95,7 @@ async function gemini(system: string, prompt: string, temperature = 0.7): Promis
   for (const model of models) {
     let thinking = true; // 생각 시간을 줄여 빨리 답하게 합니다.
     for (let attempt = 0; attempt < 3; attempt++) {
-      const generationConfig: Record<string, unknown> = { temperature, responseMimeType: "application/json", maxOutputTokens: 4096 };
+      const generationConfig: Record<string, unknown> = { temperature, responseMimeType: "application/json", maxOutputTokens: maxTokens };
       if (thinking) generationConfig.thinkingConfig = { thinkingBudget: 0 };
       const t0 = Date.now();
       let res: Response;
@@ -181,6 +181,7 @@ Return JSON:
   "better_en": "a natural, correct version of what he meant, at his level",
   "better_ko": "Korean meaning",
   "tip_ko": "one short Korean tip about grammar or a word, or empty string",
+  "answer_ko": "what the learner meant, written in natural Korean in his own first-person voice (저는 ...)",
   "facts": ["short English facts about the learner's life learned from this answer, e.g. 'Has a son who lives in Busan'. Empty if none."]
 }`;
   return await gemini(system, prompt, 0.4);
@@ -190,7 +191,7 @@ Return JSON:
 async function chatTurn(b: any) {
   const level = levelOf(b.level);
   const topic = TOPICS[b.topic] ? b.topic : "me";
-  const history = Array.isArray(b.history) ? b.history.slice(-16) : [];
+  const history = Array.isArray(b.history) ? b.history.slice(-12) : [];
   const transcript = history
     .map((m: any) => `${m.role === "me" ? "Learner" : "Emma"}: ${clip(m.en, 300)}`)
     .join("\n");
@@ -201,7 +202,7 @@ async function chatTurn(b: any) {
 Topic: ${TOPICS[topic]}
 ${LEVELS[level]}
 What we know about him:
-${notesText(b.notes)}
+${notesText(Array.isArray(b.notes) ? b.notes.slice(0, 15) : [])}
 
 Conversation so far:
 ${transcript || "(none)"}
@@ -215,9 +216,10 @@ Return JSON:
   "fix_en": "if the learner's LAST line had a clear mistake, a corrected natural version; otherwise empty string",
   "help_en": "a simple answer the learner could say next, at his level (empty if ending)",
   "help_ko": "Korean meaning of help_en",
+  "said_ko": "what the learner meant in his LAST line, in natural Korean first person (empty if ending)",
   "facts": ["new short English facts about the learner from his last line, or empty"]
 }`;
-  return await gemini(system, prompt, 0.8);
+  return await gemini(system, prompt, 0.7, 1200);
 }
 
 // 편지 읽기 도우미
@@ -259,6 +261,56 @@ Return JSON:
   "better_words": [ {"en": "a nicer word or phrase he could use", "ko": "Korean"} ]
 }`;
   return await gemini(system, prompt, 0.4);
+}
+
+
+// ---------------------------------------------------------------------------
+// 자연스러운 목소리 (Gemini TTS). 실패하면 앱이 기기 목소리로 대신 읽습니다.
+const TTS_MODELS = ["gemini-3.8-flash-tts", "gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts", "gemini-3.8-flash-lite-tts"];
+const PACE: Record<number, string> = {
+  1: "very slowly and very clearly, with small pauses between words",
+  2: "slowly and clearly",
+  3: "slowly and clearly",
+  4: "at a relaxed, natural pace",
+  5: "at a relaxed, natural pace",
+};
+
+async function speech(b: any) {
+  const key = Deno.env.get("GEMINI_API_KEY");
+  if (!key) throw new GeminiError(500, "GEMINI_API_KEY is not set");
+  const text = clip(b.text, 500).trim();
+  if (!text) throw new GeminiError(400, "empty text");
+  const voice = Deno.env.get("TTS_VOICE") || "Sulafat";
+  const pace = PACE[levelOf(b.level)];
+  let lastErr: GeminiError | null = null;
+  for (const model of TTS_MODELS) {
+    const t0 = Date.now();
+    let res: Response;
+    try {
+      res = await callGemini(model, key, {
+        contents: [{ role: "user", parts: [{ text: `Read this aloud in a warm, kind, friendly female voice, like a patient English teacher speaking to an older beginner, ${pace}:\n${text}` }] }],
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+        },
+      }, 30000);
+    } catch (e) {
+      lastErr = e instanceof GeminiError ? e : new GeminiError(502, String(e));
+      continue;
+    }
+    console.log("tts", model, res.status, Date.now() - t0, "ms");
+    if (res.ok) {
+      const data = await res.json();
+      const part = data?.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData?.data);
+      if (part) return { audio: part.inlineData.data, mime: part.inlineData.mimeType || "audio/L16;rate=24000", model };
+      lastErr = new GeminiError(502, "no audio");
+      continue;
+    }
+    const t = await res.text();
+    console.error("tts error", model, res.status, t.slice(0, 200));
+    lastErr = new GeminiError(res.status, t.slice(0, 300));
+  }
+  throw lastErr || new GeminiError(502, "TTS failed");
 }
 
 // 프로젝트 키 찾기 (예전 anon 키 / 새 publishable 키 모두 지원)
@@ -305,6 +357,7 @@ Deno.serve(async (req) => {
       case "chat":   return json(await chatTurn(b));
       case "letter": return json(await readLetter(b));
       case "polish": return json(await polishReply(b));
+      case "tts":    return json(await speech(b));
       case "ping":   return json({ ok: true, model: Deno.env.get("GEMINI_MODEL") || FALLBACK_MODELS[0] });
       default:       return json({ error: "unknown action" }, 400);
     }

@@ -1,4 +1,7 @@
-// 소리 내기(TTS)와 말 알아듣기(STT) — 크롬 내장 기능 사용
+// 소리 내기와 말 알아듣기
+// - Emma 목소리: Gemini 음성(자연스러움). 안 되면 기기 목소리로 대신 읽습니다.
+// - 말 알아듣기: 크롬 내장 기능
+import { ai } from './api.js';
 
 const synth = window.speechSynthesis || null;
 let voice = null;
@@ -7,8 +10,10 @@ function pickVoice() {
   if (!synth) return;
   const vs = synth.getVoices() || [];
   const en = vs.filter((v) => /^en[-_]/i.test(v.lang));
+  const good = /natural|premium|enhanced|neural|online|google us english|samantha|ava|allison|aria|jenny|zira/i;
   voice =
-    en.find((v) => /en[-_]US/i.test(v.lang) && /google|samantha|female|aria|jenny/i.test(v.name)) ||
+    en.find((v) => /en[-_]US/i.test(v.lang) && good.test(v.name)) ||
+    en.find((v) => good.test(v.name)) ||
     en.find((v) => /en[-_]US/i.test(v.lang)) ||
     en[0] ||
     null;
@@ -21,19 +26,23 @@ if (synth) {
 export const canSpeak = !!(synth && window.SpeechSynthesisUtterance);
 
 let talkingEl = null;
+let audioEl = null;
+let token = 0;
 function setTalking(on) {
   document.querySelectorAll('.avatar').forEach((a) => a.classList.toggle('talking', on));
   if (talkingEl) talkingEl.classList.toggle('playing', on);
 }
 
 export function stopSpeaking() {
+  token++;
   try { if (synth) synth.cancel(); } catch (e) { /* 무시 */ }
+  try { if (audioEl) { audioEl.pause(); audioEl = null; } } catch (e) { /* 무시 */ }
   setTalking(false);
   talkingEl = null;
 }
 
-// 영어 문장을 읽어 줍니다. 끝나면 resolve.
-export function speak(text, { rate = 0.85, button = null } = {}) {
+// 기기 목소리
+function deviceSpeak(text, { rate = 0.85, button = null } = {}) {
   return new Promise((resolve) => {
     if (!canSpeak || !text) return resolve(false);
     try {
@@ -44,7 +53,8 @@ export function speak(text, { rate = 0.85, button = null } = {}) {
       u.rate = rate;
       u.pitch = 1;
       talkingEl = button;
-      const finish = () => { setTalking(false); talkingEl = null; resolve(true); };
+      let done = false;
+      const finish = () => { if (done) return; done = true; setTalking(false); talkingEl = null; resolve(true); };
       u.onstart = () => setTalking(true);
       u.onend = finish;
       u.onerror = finish;
@@ -56,6 +66,100 @@ export function speak(text, { rate = 0.85, button = null } = {}) {
       resolve(false);
     }
   });
+}
+
+// ---- Gemini 목소리 ---------------------------------------------------------------
+let voiceLevel = 1;
+export function setVoiceLevel(l) { voiceLevel = Number(l) || 1; }
+let naturalOK = true;
+let failures = 0;
+const pending = new Map();
+
+function pcmToWav(b64, mime) {
+  const rate = Number((/rate=(\d+)/.exec(mime || '') || [])[1]) || 24000;
+  const bin = atob(b64);
+  const pcm = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) pcm[i] = bin.charCodeAt(i);
+  if (/wav|mpeg|mp3|ogg/i.test(mime || '')) return new Blob([pcm], { type: mime });
+  const h = new DataView(new ArrayBuffer(44));
+  const w = (o, str) => { for (let i = 0; i < str.length; i++) h.setUint8(o + i, str.charCodeAt(i)); };
+  w(0, 'RIFF'); h.setUint32(4, 36 + pcm.length, true); w(8, 'WAVE');
+  w(12, 'fmt '); h.setUint32(16, 16, true); h.setUint16(20, 1, true); h.setUint16(22, 1, true);
+  h.setUint32(24, rate, true); h.setUint32(28, rate * 2, true); h.setUint16(32, 2, true); h.setUint16(34, 16, true);
+  w(36, 'data'); h.setUint32(40, pcm.length, true);
+  return new Blob([h, pcm], { type: 'audio/wav' });
+}
+
+function cacheKey(text) {
+  return location.origin + '/__tts/v1/' + (voiceLevel <= 1 ? 1 : voiceLevel <= 3 ? 2 : 4) + '/' + encodeURIComponent(text.slice(0, 300));
+}
+
+// 소리 파일 주소를 돌려줍니다. 한 번 받은 소리는 기기에 저장해 다시 쓰지 않습니다.
+function naturalAudio(text) {
+  const key = cacheKey(text);
+  if (pending.has(key)) return pending.get(key);
+  const p = (async () => {
+    let blob = null;
+    try { const c = await caches.open('wt-tts'); const r = await c.match(key); if (r) blob = await r.blob(); } catch (e) { /* 저장소 없음 */ }
+    if (!blob) {
+      const r = await ai('tts', { text, level: voiceLevel });
+      if (!r || !r.audio) throw new Error('no audio');
+      blob = pcmToWav(r.audio, r.mime);
+      try { const c = await caches.open('wt-tts'); await c.put(key, new Response(blob)); } catch (e) { /* 무시 */ }
+    }
+    failures = 0;
+    return URL.createObjectURL(blob);
+  })();
+  pending.set(key, p);
+  p.catch(() => {
+    pending.delete(key);
+    failures++;
+    if (failures >= 3) naturalOK = false; // 계속 안 되면 오늘은 기기 목소리로
+  });
+  return p;
+}
+
+// 다음에 읽을 문장을 미리 받아 둡니다.
+export function prefetch(text) {
+  if (naturalOK && text) naturalAudio(text).catch(() => {});
+}
+
+function playUrl(url, { rate = 0.85, button = null } = {}, my) {
+  return new Promise((resolve) => {
+    if (my !== token) return resolve(false);
+    const a = new Audio(url);
+    audioEl = a;
+    a.playbackRate = rate <= 0.6 ? 0.78 : 1;
+    talkingEl = button;
+    let done = false;
+    const finish = (ok) => { if (done) return; done = true; if (audioEl === a) audioEl = null; setTalking(false); talkingEl = null; resolve(ok); };
+    a.onplay = () => setTalking(true);
+    a.onended = () => finish(true);
+    a.onerror = () => finish(false);
+    a.onpause = () => finish(true);
+    a.play().catch(() => finish(false));
+  });
+}
+
+// 영어 문장을 읽어 줍니다. natural:true 면 Gemini 목소리. 끝나면 resolve.
+export async function speak(text, opts = {}) {
+  if (!text) return false;
+  stopSpeaking();
+  const my = token;
+  if (opts.natural && naturalOK) {
+    if (opts.button) opts.button.classList.add('loading');
+    try {
+      const url = await naturalAudio(text);
+      if (opts.button) opts.button.classList.remove('loading');
+      if (my !== token) return false;
+      const ok = await playUrl(url, opts, my);
+      if (ok || my !== token) return ok;
+    } catch (e) {
+      if (opts.button) opts.button.classList.remove('loading');
+      if (my !== token) return false;
+    }
+  }
+  return deviceSpeak(text, opts);
 }
 
 // ---------------------------------------------------------------------------

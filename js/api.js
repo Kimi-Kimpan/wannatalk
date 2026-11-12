@@ -159,3 +159,27 @@ export async function familyLetters(limit = 30) {
   if (error) throw error;
   return data || [];
 }
+
+// 자서전 자료 (인터뷰 대답 원문) ----------------------------------------------------
+export async function addEntry(row) {
+  if (!row || !row.answer_en) return;
+  const clean = {
+    day: row.day ?? null,
+    topic: row.topic ?? null,
+    kind: row.kind,
+    prompt_en: row.prompt_en ? String(row.prompt_en).slice(0, 2000) : null,
+    answer_en: String(row.answer_en).slice(0, 2000),
+    better_en: row.better_en ? String(row.better_en).slice(0, 2000) : null,
+    answer_ko: row.answer_ko ? String(row.answer_ko).slice(0, 2000) : null,
+  };
+  await sb.from('story_entries').insert(clean);
+}
+
+// 마지막 접속 시간, 관리자 확인 -------------------------------------------------------
+export async function touchSeen(uid) {
+  await sb.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', uid);
+}
+export async function isAdmin() {
+  const { data } = await sb.rpc('is_admin');
+  return data === true;
+}

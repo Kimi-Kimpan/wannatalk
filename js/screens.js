@@ -87,6 +87,7 @@ export async function boot() {
     }
     if (!p) throw new Error('no profile');
     state.profile = p;
+    api.touchSeen(state.user.id).catch(() => {});
     if (!p.name || !p.role) return go('setup');
     if (p.role === 'friend') return go('friend');
     if (!p.placement) return go('placement');
@@ -223,6 +224,7 @@ register('settings', async () => {
 
     <div class="panel">
       <p class="muted">${esc(state.user.email || '')}</p>
+      <div id="adminLink"></div>
       <button class="plain mid" id="logout" type="button">로그아웃</button>
     </div>
   </section>`);
@@ -240,6 +242,9 @@ register('settings', async () => {
     go('settings');
   });
   on('logout', async () => { await api.signOut(); state.user = null; state.profile = null; go('login'); });
+  api.isAdmin().then((yes) => {
+    if (yes && $('adminLink')) $('adminLink').innerHTML = '<a class="big plain admin-link" href="admin.html">관리자 화면 열기</a>';
+  }).catch(() => {});
 
   try {
     const [letters, members] = await Promise.all([api.familyLetters(20), api.familyMembers(p.family)]);

@@ -1,6 +1,6 @@
 // 하루 패키지: 편지 → 문장 카드 → 낱말 10개 → 묻고 답하기 → 3분 대화
 import { state, register, go, mount, on, $, esc, topBar, shuffle, today, loading, errorScreen, avatar, tileBuilder, toTiles, ICON } from './ui.js';
-import { speak, listen, canListen, bestSimilarity, sameSentence, LISTEN_ERRORS } from './speech.js';
+import { speak, prefetch, setVoiceLevel, listen, canListen, bestSimilarity, sameSentence, LISTEN_ERRORS } from './speech.js';
 import { TOPICS, topicForDay, cycleForDay, SPEECH_RATE } from './content.js';
 import { TALK_SECONDS } from './config.js';
 import * as api from './api.js';
@@ -75,6 +75,8 @@ async function startDay({ day, review = false }) {
     level: pack.level, topic: pack.topic, rate: SPEECH_RATE[pack.level] || 0.85,
     score: { words: [0, 0], qa: [0, 0], talk: 0, letter: false },
   };
+  setVoiceLevel(S.level);
+  if (S.c.cards[0]) prefetch(S.c.cards[0].en);
   if (!review) {
     const saved = readProgress();
     if (saved && saved.day === day) {
@@ -97,7 +99,14 @@ function header(S, part = 0) {
 }
 function bindQuit() { on('quit', () => go('home')); }
 function say(text, S, btnId = 'play', slow = false) {
-  return speak(text, { rate: slow ? 0.55 : S.rate, button: $(btnId) });
+  return speak(text, { rate: slow ? 0.55 : S.rate, button: $(btnId), natural: true });
+}
+// Emma 목소리로 말하기
+function emma(text, S) {
+  return speak(text, { rate: S.rate, natural: true });
+}
+function save(S, row) {
+  api.addEntry({ day: S.day, topic: S.topic, ...row }).catch(() => {});
 }
 
 // 따라 말하기 공통
@@ -252,6 +261,7 @@ async function letterStep(S) {
         await api.sendLetter({ family: state.profile.family, to_id: L.from_id, body: r.fixed_en, reply_to: L.id });
         await api.markLetter(L.id);
         S.score.letter = true;
+        save(S, { kind: 'letter', prompt_en: L.body, answer_en: draft, better_en: r.fixed_en, answer_ko: r.fixed_ko });
         mount(`<section class="screen center">
           <div class="big-emoji" aria-hidden="true">✉️</div>
           <h1>답장을 보냈어요!</h1>
@@ -301,6 +311,8 @@ function cardsStep(S) {
     on('prev', () => { if (k > 0) { k--; render(); } });
     on('next', () => { if (k < cards.length - 1) { k++; render(); } else nextStep(S); });
     setTimeout(() => { if ($('play')) say(it.en, S); }, 350);
+    if (cards[k + 1]) prefetch(cards[k + 1].en);
+    else if (S.c.questions[0]) prefetch(S.c.questions[0].en);
   }
   render();
 }
@@ -406,9 +418,11 @@ function qaStep(S) {
       </div>
     </section>`);
     bindQuit();
-    const play = () => speak(q.en, { rate: S.rate });
+    const play = () => emma(q.en, S);
     on('again', play);
     setTimeout(() => { if ($('again')) play(); }, 350);
+    if (qs[k + 1]) prefetch(qs[k + 1].en);
+    else if (S.c.talk && S.c.talk.opener_en) prefetch(S.c.talk.opener_en);
     document.querySelectorAll('.choice').forEach((b) => b.addEventListener('click', () => answered(q, q.choices[Number(b.dataset.j)].en, 'choice', q.choices[Number(b.dataset.j)].ko)));
     on('mic', async () => {
       const mic = $('mic');
@@ -442,10 +456,12 @@ function qaStep(S) {
       try {
         r = await api.ai('check', { question: q.en, answer: text, level: S.level, topic: S.topic });
         api.addNotes(r.facts, S.topic).catch(() => {});
+        save(S, { kind: 'qa', prompt_en: q.en, answer_en: text, better_en: r.better_en, answer_ko: r.answer_ko });
         S.score.qa[0] += r.good ? 1 : 0.5;
       } catch (e) {
         r = { reply_en: 'Thank you!', reply_ko: '고마워요!', better_en: '', tip_ko: '' };
         S.score.qa[0] += 0.5;
+        save(S, { kind: 'qa', prompt_en: q.en, answer_en: text });
       }
     }
     S.score.qa[1] += 1;
@@ -463,10 +479,11 @@ function qaStep(S) {
       <button class="big primary" id="nextQ" type="button">${k === qs.length - 1 ? '다음으로' : '다음 질문'}</button>`;
     const ag = $('again');
     if (ag) { const fresh = ag.cloneNode(true); ag.replaceWith(fresh); }
-    on('again', () => speak(r.reply_en, { rate: S.rate }));
-    on('hearBetter', () => speak(r.better_en, { rate: S.rate }));
+    on('again', () => emma(r.reply_en, S));
+    on('hearBetter', () => emma(r.better_en, S));
     on('nextQ', () => { k++; ask(); });
-    speak(r.reply_en, { rate: S.rate });
+    emma(r.reply_en, S);
+    if (showBetter) prefetch(r.better_en);
   }
 
   ask();
@@ -539,13 +556,14 @@ function talkStep(S) {
         history: history.map(({ role, en }) => ({ role, en })),
       });
       if (r.fix_en && !sameSentence(r.fix_en, text)) history[history.length - 1].fix = r.fix_en;
+      save(S, { kind: 'talk', prompt_en: (lastEmma() || {}).en, answer_en: text, better_en: r.fix_en || '', answer_ko: r.said_ko || '' });
       if (r.en) history.push({ role: 'emma', en: r.en, ko: r.ko || '' });
       if (r.help_en) help = { en: r.help_en, ko: r.help_ko || '' };
       api.addNotes(r.facts, S.topic).catch(() => {});
       if (Array.isArray(r.facts)) S.notes = [...r.facts, ...S.notes].slice(0, 40);
       renderLog();
       setHint('');
-      if (r.en && !ended) await speak(r.en, { rate: S.rate });
+      if (r.en && !ended) { if (r.help_en) prefetch(r.help_en); await emma(r.en, S); }
     } catch (e) {
       setHint(api.aiMessage(e));
       showSkip();
@@ -579,10 +597,10 @@ function talkStep(S) {
     setHint('');
     $('controls').innerHTML = '<button class="big primary" id="done" type="button">오늘 공부 마치기</button>';
     on('done', () => nextStep(S));
-    speak(bye.en, { rate: S.rate });
+    emma(bye.en, S);
   }
 
-  on('again', () => { const m = lastEmma(); if (m) speak(m.en, { rate: S.rate }); });
+  on('again', () => { const m = lastEmma(); if (m) emma(m.en, S); });
   on('help', () => {
     $('helpBox').innerHTML = `<div class="better">
       <p class="label">이렇게 말해 보세요</p>
@@ -593,7 +611,7 @@ function talkStep(S) {
         <button class="primary mid" id="useHelp" type="button">이렇게 말할래요</button>
       </div>
     </div>`;
-    on('hearHelp', () => speak(help.en, { rate: S.rate }));
+    on('hearHelp', () => emma(help.en, S));
     on('useHelp', () => send(help.en));
   });
   on('mic', async () => {
@@ -619,7 +637,7 @@ function talkStep(S) {
   });
 
   renderLog();
-  setTimeout(() => { if ($('log')) speak(t.opener_en, { rate: S.rate }); }, 350);
+  setTimeout(() => { if ($('log')) emma(t.opener_en, S); }, 350);
   state.timer = setInterval(() => {
     left--;
     if ($('timer')) $('timer').textContent = `남은 시간 ${fmt(Math.max(0, left))}`;
