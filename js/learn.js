@@ -51,13 +51,19 @@ async function loadPack(day) {
 
 async function startDay({ day, review = false }) {
   loading('Emma 선생님이 오늘 공부를 준비하고 있어요…');
+  const slow = setTimeout(() => {
+    const p = document.querySelector('.screen .lead');
+    if (p) p.textContent = '조금만 기다려 주세요. 새 공부를 만들 때는 30초쯤 걸려요…';
+  }, 12000);
   let pack;
   try {
     pack = await loadPack(day);
   } catch (e) {
+    clearTimeout(slow);
     return errorScreen(e instanceof api.AIError ? api.aiMessage(e) : '공부를 불러오지 못했어요. 인터넷을 확인하고 다시 눌러 주세요.',
       () => startDay({ day, review }));
   }
+  clearTimeout(slow);
   let letter = null;
   if (!review) { try { letter = await api.pendingLetter(state.user.id); } catch (e) { /* 편지 없이 진행 */ } }
   let notes = [];

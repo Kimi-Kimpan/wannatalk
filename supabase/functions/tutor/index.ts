@@ -1,6 +1,6 @@
 // WannaTalk AI 선생님 (Supabase Edge Function: "tutor")
 // Gemini API 키는 Supabase 비밀값 GEMINI_API_KEY 에 넣어 두고, 여기서만 사용합니다.
-// 모델은 비밀값 GEMINI_MODEL 로 바꿀 수 있습니다. (기본값: gemini-flash-latest)
+// 모델은 비밀값 GEMINI_MODEL 로 바꿀 수 있습니다. (기본값: gemini-3.5-flash, 붐비면 다른 Flash 모델로 넘어감)
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
@@ -64,38 +64,71 @@ class GeminiError extends Error {
   }
 }
 
+async function callGemini(model: string, key: string, body: unknown, ms: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw new GeminiError(504, "Gemini timed out");
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// 붐비면(503) 다음 모델로 넘어갑니다.
+const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"];
+
 async function gemini(system: string, prompt: string, temperature = 0.7): Promise<any> {
   const key = Deno.env.get("GEMINI_API_KEY");
   if (!key) throw new GeminiError(500, "GEMINI_API_KEY is not set");
-  const model = Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const first = Deno.env.get("GEMINI_MODEL") || FALLBACK_MODELS[0];
+  const models = [first, ...FALLBACK_MODELS.filter((m) => m !== first)];
+  let lastErr: GeminiError | null = null;
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature, responseMimeType: "application/json" },
-      }),
-    });
-    if (res.status === 429) throw new GeminiError(429, "rate limited");
-    if (!res.ok) {
+  for (const model of models) {
+    let thinking = true; // 생각 시간을 줄여 빨리 답하게 합니다.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const generationConfig: Record<string, unknown> = { temperature, responseMimeType: "application/json", maxOutputTokens: 4096 };
+      if (thinking) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+      const t0 = Date.now();
+      let res: Response;
+      try {
+        res = await callGemini(model, key, {
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig,
+        }, 45000);
+      } catch (e) {
+        lastErr = e instanceof GeminiError ? e : new GeminiError(502, String(e));
+        break; // 시간 초과 → 다음 모델
+      }
+      console.log("gemini", model, res.status, Date.now() - t0, "ms");
+      if (res.ok) {
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.filter((p: any) => !p.thought).map((p: any) => p.text ?? "").join("") ?? "";
+        try {
+          return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ""));
+        } catch {
+          console.error("bad json", text.slice(0, 200));
+          lastErr = new GeminiError(502, "AI returned invalid JSON");
+          continue;
+        }
+      }
       const t = await res.text();
-      if (attempt === 0 && res.status >= 500) continue;
-      throw new GeminiError(res.status, t.slice(0, 500));
-    }
-    const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("") ?? "";
-    try {
-      return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ""));
-    } catch {
-      if (attempt === 0) continue;
-      throw new GeminiError(502, "AI returned invalid JSON");
+      console.error("gemini error", model, res.status, t.slice(0, 300));
+      lastErr = new GeminiError(res.status, t.slice(0, 500));
+      if (res.status === 400 && thinking) { thinking = false; continue; }
+      break; // 503/404/429 등 → 다음 모델
     }
   }
-  throw new GeminiError(502, "AI failed");
+  throw lastErr || new GeminiError(502, "AI failed");
 }
 
 // ---------------------------------------------------------------------------
@@ -272,7 +305,7 @@ Deno.serve(async (req) => {
       case "chat":   return json(await chatTurn(b));
       case "letter": return json(await readLetter(b));
       case "polish": return json(await polishReply(b));
-      case "ping":   return json({ ok: true, model: Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest" });
+      case "ping":   return json({ ok: true, model: Deno.env.get("GEMINI_MODEL") || FALLBACK_MODELS[0] });
       default:       return json({ error: "unknown action" }, 400);
     }
   } catch (e) {

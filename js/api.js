@@ -16,7 +16,14 @@ export class AIError extends Error {
 
 // AI 선생님 호출
 export async function ai(action, payload = {}) {
-  const { data, error } = await sb.functions.invoke('tutor', { body: { action, ...payload } });
+  let timer;
+  const timeout = new Promise((_, rej) => { timer = setTimeout(() => rej(new AIError('timeout')), 100000); });
+  let data, error;
+  try {
+    ({ data, error } = await Promise.race([sb.functions.invoke('tutor', { body: { action, ...payload } }), timeout]));
+  } finally {
+    clearTimeout(timer);
+  }
   if (error) {
     let code = 'ai_error';
     try {
@@ -36,6 +43,7 @@ export function aiMessage(e) {
   if (code === 'busy') return 'Emma 선생님이 잠깐 쉬는 중이에요. 1분 뒤에 다시 눌러 주세요.';
   if (code === 'network') return '인터넷 연결을 확인하고 다시 눌러 주세요.';
   if (code === 'auth') return '다시 로그인해 주세요.';
+  if (code === 'timeout') return 'Emma 선생님 대답이 너무 늦어요. 잠시 뒤 다시 눌러 주세요.';
   return 'Emma 선생님과 연결이 잘 안 돼요. 잠시 뒤 다시 눌러 주세요.';
 }
 

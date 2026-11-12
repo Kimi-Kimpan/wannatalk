@@ -18,7 +18,7 @@
 |---|---|
 | 화면 | GitHub Pages (이 저장소 그대로, 빌드 없음) |
 | 로그인·진도·편지 | Supabase (메일 속 링크로 로그인) |
-| AI 선생님 | Supabase Edge Function `tutor` → Gemini API |
+| AI 선생님 | Supabase Edge Function `tutor` → Gemini API (기본 gemini-3.5-flash, 붐비면 다른 Flash 모델) |
 | 듣기·말하기 | 크롬 내장 음성 기능 |
 
 ```
