@@ -64,9 +64,11 @@ class GeminiError extends Error {
   }
 }
 
-async function callGemini(model: string, key: string, body: unknown, ms: number): Promise<Response> {
+async function callGemini(model: string, key: string, body: unknown, ms: number, outer?: AbortSignal): Promise<Response> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
+  const onOuter = () => ctrl.abort();
+  outer?.addEventListener("abort", onOuter);
   try {
     return await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: "POST",
@@ -75,60 +77,83 @@ async function callGemini(model: string, key: string, body: unknown, ms: number)
       signal: ctrl.signal,
     });
   } catch (e) {
-    if ((e as Error).name === "AbortError") throw new GeminiError(504, "Gemini timed out");
+    if ((e as Error).name === "AbortError") throw new GeminiError(504, `${model} timed out or cancelled`);
     throw e;
   } finally {
     clearTimeout(timer);
+    outer?.removeEventListener("abort", onOuter);
   }
 }
 
-// 붐비면(503) 다음 모델로 넘어갑니다.
-const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"];
+// 모델 순서. 붐비거나 느리면 다음 모델을 함께 불러 먼저 온 답을 씁니다.
+const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-flash-lite-latest"];
+const HEDGE_MS = 8000;      // 이 시간 안에 답이 없으면 다음 모델도 함께 부름
+const TOTAL_MS = 60000;     // 전체 제한
+
+// 모델 하나로 한 번 시도 (생각 설정이 안 맞으면 끄고 다시)
+async function tryModel(model: string, key: string, system: string, prompt: string, temperature: number, maxTokens: number, signal: AbortSignal): Promise<any> {
+  let thinking = true;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const generationConfig: Record<string, unknown> = { temperature, responseMimeType: "application/json", maxOutputTokens: maxTokens };
+    if (thinking) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    const t0 = Date.now();
+    const res = await callGemini(model, key, {
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig,
+    }, TOTAL_MS, signal);
+    console.log("gemini", model, res.status, Date.now() - t0, "ms");
+    if (res.ok) {
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.filter((p: any) => !p.thought).map((p: any) => p.text ?? "").join("") ?? "";
+      try {
+        return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ""));
+      } catch {
+        console.error("bad json", model, text.slice(0, 200));
+        if (attempt < 1) continue;
+        throw new GeminiError(502, "AI returned invalid JSON");
+      }
+    }
+    const t = await res.text();
+    console.error("gemini error", model, res.status, t.slice(0, 300));
+    if (res.status === 400 && thinking) { thinking = false; continue; }
+    throw new GeminiError(res.status, t.slice(0, 500));
+  }
+  throw new GeminiError(502, "AI failed");
+}
 
 async function gemini(system: string, prompt: string, temperature = 0.7, maxTokens = 4096): Promise<any> {
   const key = Deno.env.get("GEMINI_API_KEY");
   if (!key) throw new GeminiError(500, "GEMINI_API_KEY is not set");
   const first = Deno.env.get("GEMINI_MODEL") || FALLBACK_MODELS[0];
   const models = [first, ...FALLBACK_MODELS.filter((m) => m !== first)];
-  let lastErr: GeminiError | null = null;
 
-  for (const model of models) {
-    let thinking = true; // 생각 시간을 줄여 빨리 답하게 합니다.
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const generationConfig: Record<string, unknown> = { temperature, responseMimeType: "application/json", maxOutputTokens: maxTokens };
-      if (thinking) generationConfig.thinkingConfig = { thinkingBudget: 0 };
-      const t0 = Date.now();
-      let res: Response;
-      try {
-        res = await callGemini(model, key, {
-          systemInstruction: { parts: [{ text: system }] },
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig,
-        }, 45000);
-      } catch (e) {
-        lastErr = e instanceof GeminiError ? e : new GeminiError(502, String(e));
-        break; // 시간 초과 → 다음 모델
-      }
-      console.log("gemini", model, res.status, Date.now() - t0, "ms");
-      if (res.ok) {
-        const data = await res.json();
-        const text = data?.candidates?.[0]?.content?.parts?.filter((p: any) => !p.thought).map((p: any) => p.text ?? "").join("") ?? "";
-        try {
-          return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ""));
-        } catch {
-          console.error("bad json", text.slice(0, 200));
-          lastErr = new GeminiError(502, "AI returned invalid JSON");
-          continue;
-        }
-      }
-      const t = await res.text();
-      console.error("gemini error", model, res.status, t.slice(0, 300));
-      lastErr = new GeminiError(res.status, t.slice(0, 500));
-      if (res.status === 400 && thinking) { thinking = false; continue; }
-      break; // 503/404/429 등 → 다음 모델
-    }
-  }
-  throw lastErr || new GeminiError(502, "AI failed");
+  return await new Promise((resolve, reject) => {
+    let next = 0, running = 0, done = false;
+    let lastErr: GeminiError = new GeminiError(502, "AI failed");
+    const ctrls: AbortController[] = [];
+    const finish = () => { done = true; clearInterval(hedge); clearTimeout(limit); ctrls.forEach((c) => c.abort()); };
+    const launch = () => {
+      if (done || next >= models.length) return;
+      const model = models[next++];
+      const ctrl = new AbortController();
+      ctrls.push(ctrl);
+      running++;
+      tryModel(model, key, system, prompt, temperature, maxTokens, ctrl.signal)
+        .then((r) => { if (done) return; finish(); resolve(r); })
+        .catch((e) => {
+          running--;
+          if (done) return;
+          lastErr = e instanceof GeminiError ? e : new GeminiError(502, String(e));
+          console.error("gemini fail", model, lastErr.status, lastErr.message.slice(0, 120));
+          if (next < models.length) launch();          // 실패하면 바로 다음 모델
+          else if (running === 0) { finish(); reject(lastErr); }
+        });
+    };
+    const hedge = setInterval(launch, HEDGE_MS);       // 느리면 다음 모델도 함께
+    const limit = setTimeout(() => { if (!done) { finish(); reject(new GeminiError(504, "AI timed out")); } }, TOTAL_MS);
+    launch();
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -293,9 +318,10 @@ async function speech(b: any) {
           responseModalities: ["AUDIO"],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
         },
-      }, 30000);
+      }, 15000);
     } catch (e) {
       lastErr = e instanceof GeminiError ? e : new GeminiError(502, String(e));
+      console.error("tts timeout", model);
       continue;
     }
     console.log("tts", model, res.status, Date.now() - t0, "ms");
