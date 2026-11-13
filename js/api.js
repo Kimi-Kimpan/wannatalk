@@ -59,6 +59,30 @@ export async function verifyCode(email, token) {
   if (error) throw error;
   return data.session;
 }
+// 메일 속 로그인 링크를 붙여넣어 로그인 (아이폰 홈 화면 앱용)
+export async function signInWithLink(raw) {
+  let text = String(raw || '').trim();
+  for (let i = 0; i < 3; i++) { try { const d = decodeURIComponent(text); if (d === text) break; text = d; } catch (e) { break; } }
+  const access = /[#&?]access_token=([^&#\s]+)/.exec(text);
+  const refresh = /[#&?]refresh_token=([^&#\s]+)/.exec(text);
+  if (access && refresh) {
+    const { data, error } = await sb.auth.setSession({ access_token: access[1], refresh_token: refresh[1] });
+    if (error) throw error;
+    return data.session;
+  }
+  const m = /[?&]token=([^&#\s]+)/.exec(text);
+  if (!m) throw new Error('no_token');
+  const typeM = /[?&]type=([a-z_]+)/.exec(text);
+  const types = [...new Set([typeM ? typeM[1] : 'magiclink', 'magiclink', 'email', 'signup'])];
+  let lastErr = null;
+  for (const type of types) {
+    const { data, error } = await sb.auth.verifyOtp({ token_hash: m[1], type });
+    if (!error && data && data.session) return data.session;
+    lastErr = error;
+  }
+  throw lastErr || new Error('verify_failed');
+}
+
 export async function currentUser() {
   const { data } = await sb.auth.getSession();
   return data.session ? data.session.user : null;

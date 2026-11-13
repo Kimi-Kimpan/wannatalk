@@ -241,10 +241,18 @@ input.code { font-family: var(--font-en); font-size: 34px; letter-spacing: 8px; 
 .hero h1 { font-size: 30px; }
 .avatar.lg { width: 132px; height: 132px; }
 .feature-list { list-style: none; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.feature-list li { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 12px 14px; font-weight: 700; font-size: 21px; display: flex; align-items: center; gap: 10px; }
+.feature-list li { padding: 6px 4px; font-weight: 700; font-size: 21px; display: flex; align-items: center; gap: 10px; }
 .link-btn { align-self: center; min-height: 52px; padding: 6px 12px; font-size: 19px; font-weight: 700; color: var(--ink-soft); text-decoration: underline; text-underline-offset: 4px; }
 .mode-pill { font-size: 17px; font-weight: 700; padding: 6px 14px; border-radius: 99px; background: var(--tint); color: var(--primary); }
 .mode-pill.admin { background: var(--ink); color: var(--paper); }
+
+/* 로그인: 링크 붙여넣기 */
+.alt-login summary { cursor: pointer; font-weight: 700; font-size: 19px; color: var(--ink-soft); min-height: 44px; display: flex; align-items: center; }
+.alt-login[open] { gap: 12px; }
+.alt-login #ok { width: 100%; flex: none; }
+.hero .lead { text-wrap: balance; }
+.msg:empty { min-height: 0; }
+.alt-login input[type="url"] { width: 100%; min-height: 56px; padding: 10px 14px; border-radius: 14px; border: 2px solid var(--line); background: var(--card); font-size: 18px; }
 
 /* 홈 대시보드 */
 .dash-card { background: var(--card); border: 2px solid var(--line); border-radius: 22px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
