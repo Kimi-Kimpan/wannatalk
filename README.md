@@ -18,7 +18,7 @@
 |---|---|
 | 화면 | GitHub Pages (이 저장소 그대로, 빌드 없음) |
 | 로그인·진도·편지 | Supabase (메일 속 링크로 로그인) |
-| AI 선생님 | Supabase Edge Function `tutor` → Gemini API (기본 gemini-3.5-flash, 붐비면 다른 Flash 모델) |
+| AI (클라우디아) | Supabase Edge Function `tutor` → OpenAI GPT-6.1 Terra 먼저, 느리거나 안 되면 GPT-6 Luna → Gemini. 비밀값 `AI_PROVIDER=gemini` 로 Gemini 먼저 |
 | 듣기·말하기 | 크롬 내장 음성 기능 |
 
 ```
@@ -33,7 +33,7 @@ supabase/functions/tutor/    AI 선생님 서버 코드
 2. **로그인 주소**: Authentication > URL Configuration 의 Site URL 을 `https://kimi-kimpan.github.io/wannatalk/` 로 둡니다. (메일 속 링크가 이 주소로 돌아옵니다)
 3. **AI 서버**: Edge Functions > Deploy a new function > Via Editor, 이름 `tutor`,
    `supabase/functions/tutor/index.ts` 내용을 붙여넣고 Deploy.
-4. **Gemini 키**: Edge Functions > Secrets 에 `GEMINI_API_KEY` 추가. (모델을 바꾸려면 `GEMINI_MODEL` 도 추가)
+4. **AI 키**: Edge Functions > Secrets 에 `OPENAI_API_KEY`, `GEMINI_API_KEY` 추가 (하나만 있어도 동작)
 5. **추가 기능(자서전 자료·관리자)**: `supabase/migrations/002_memoir_admin.sql` 도 SQL Editor에서 실행. 관리자 화면 주소는 `admin.html`.
 6. **연결**: Project Settings > API 의 Project URL 과 anon(publishable) 키를 `js/config.js` 에 넣습니다.
 

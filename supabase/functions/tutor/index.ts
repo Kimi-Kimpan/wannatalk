@@ -1,6 +1,6 @@
 // WannaTalk AI 선생님 (Supabase Edge Function: "tutor")
 // Gemini API 키는 Supabase 비밀값 GEMINI_API_KEY 에 넣어 두고, 여기서만 사용합니다.
-// 모델은 비밀값 GEMINI_MODEL 로 바꿀 수 있습니다. (기본값: gemini-3.5-flash, 붐비면 다른 Flash 모델로 넘어감)
+// 모델은 비밀값 GEMINI_MODEL 로 바꿀 수 있습니다. (OPENAI_API_KEY 가 있으면 GPT-6.1 Terra 먼저, 느리거나 안 되면 다음 모델 → Gemini)
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
@@ -86,12 +86,89 @@ async function callGemini(model: string, key: string, body: unknown, ms: number,
 }
 
 // 모델 순서. 붐비거나 느리면 다음 모델을 함께 불러 먼저 온 답을 씁니다.
+// OPENAI_API_KEY 가 있으면 OpenAI(Terra → Luna)를 먼저, 그다음 Gemini.
+type Choice = { provider: "openai" | "gemini"; model: string };
+const OPENAI_MODELS = ["gpt-6.1-terra", "gpt-6-luna"];
 const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-flash-lite-latest"];
 const HEDGE_MS = 8000;      // 이 시간 안에 답이 없으면 다음 모델도 함께 부름
 const TOTAL_MS = 60000;     // 전체 제한
 
-// 모델 하나로 한 번 시도 (생각 설정이 안 맞으면 끄고 다시)
-async function tryModel(model: string, key: string, system: string, prompt: string, temperature: number, maxTokens: number, signal: AbortSignal): Promise<any> {
+function modelOrder(): Choice[] {
+  const list: Choice[] = [];
+  const openaiFirst = (Deno.env.get("AI_PROVIDER") || "openai") !== "gemini";
+  const oa = Deno.env.get("OPENAI_API_KEY") ? (Deno.env.get("OPENAI_MODELS") || OPENAI_MODELS.join(",")).split(",").map((m) => m.trim()).filter(Boolean) : [];
+  const gFirst = Deno.env.get("GEMINI_MODEL") || FALLBACK_MODELS[0];
+  const gm = Deno.env.get("GEMINI_API_KEY") ? [gFirst, ...FALLBACK_MODELS.filter((m) => m !== gFirst)] : [];
+  const o = oa.map((model) => ({ provider: "openai" as const, model }));
+  const g = gm.map((model) => ({ provider: "gemini" as const, model }));
+  return openaiFirst ? [...o, ...g] : [...g, ...o];
+}
+
+function parseJson(text: string): any {
+  return JSON.parse(String(text || "").trim().replace(/^```(?:json)?\s*|\s*```$/g, ""));
+}
+
+// OpenAI 한 번 시도 (안 맞는 옵션은 빼고 다시)
+async function tryOpenAI(model: string, system: string, prompt: string, temperature: number, maxTokens: number, signal: AbortSignal): Promise<any> {
+  const key = Deno.env.get("OPENAI_API_KEY")!;
+  // 새 OpenAI 모델은 temperature 를 기본값만 받아서 보내지 않습니다.
+  let extras: Record<string, unknown> = { reasoning_effort: "low" };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const ctrl = new AbortController();
+    const onOuter = () => ctrl.abort();
+    signal.addEventListener("abort", onOuter);
+    const timer = setTimeout(() => ctrl.abort(), TOTAL_MS);
+    const t0 = Date.now();
+    let res: Response;
+    try {
+      res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "system", content: system }, { role: "user", content: prompt }],
+          response_format: { type: "json_object" },
+          max_completion_tokens: maxTokens,
+          ...extras,
+        }),
+        signal: ctrl.signal,
+      });
+    } catch (e) {
+      if ((e as Error).name === "AbortError") throw new GeminiError(504, `${model} timed out or cancelled`);
+      throw e;
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onOuter);
+    }
+    console.log("openai", model, res.status, Date.now() - t0, "ms");
+    if (res.ok) {
+      const data = await res.json();
+      const text = data?.choices?.[0]?.message?.content ?? "";
+      try {
+        return parseJson(text);
+      } catch {
+        console.error("bad json", model, String(text).slice(0, 200));
+        if (attempt < 1) continue;
+        throw new GeminiError(502, "AI returned invalid JSON");
+      }
+    }
+    const t = await res.text();
+    console.error("openai error", model, res.status, t.slice(0, 300));
+    if (res.status === 400 && Object.keys(extras).length) {
+      // 모델이 받지 않는 옵션이 있으면 빼고 다시
+      extras = /reasoning/i.test(t) ? Object.fromEntries(Object.entries(extras).filter(([k]) => k !== "reasoning_effort"))
+        : /temperature/i.test(t) ? Object.fromEntries(Object.entries(extras).filter(([k]) => k !== "temperature"))
+        : {};
+      continue;
+    }
+    throw new GeminiError(res.status === 429 ? 429 : res.status, t.slice(0, 500));
+  }
+  throw new GeminiError(502, "AI failed");
+}
+
+// Gemini 한 번 시도 (생각 설정이 안 맞으면 끄고 다시)
+async function tryGemini(model: string, system: string, prompt: string, temperature: number, maxTokens: number, signal: AbortSignal): Promise<any> {
+  const key = Deno.env.get("GEMINI_API_KEY")!;
   let thinking = true;
   for (let attempt = 0; attempt < 3; attempt++) {
     const generationConfig: Record<string, unknown> = { temperature, responseMimeType: "application/json", maxOutputTokens: maxTokens };
@@ -107,7 +184,7 @@ async function tryModel(model: string, key: string, system: string, prompt: stri
       const data = await res.json();
       const text = data?.candidates?.[0]?.content?.parts?.filter((p: any) => !p.thought).map((p: any) => p.text ?? "").join("") ?? "";
       try {
-        return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ""));
+        return parseJson(text);
       } catch {
         console.error("bad json", model, text.slice(0, 200));
         if (attempt < 1) continue;
@@ -123,10 +200,8 @@ async function tryModel(model: string, key: string, system: string, prompt: stri
 }
 
 async function gemini(system: string, prompt: string, temperature = 0.7, maxTokens = 4096): Promise<any> {
-  const key = Deno.env.get("GEMINI_API_KEY");
-  if (!key) throw new GeminiError(500, "GEMINI_API_KEY is not set");
-  const first = Deno.env.get("GEMINI_MODEL") || FALLBACK_MODELS[0];
-  const models = [first, ...FALLBACK_MODELS.filter((m) => m !== first)];
+  const models = modelOrder();
+  if (!models.length) throw new GeminiError(500, "No AI key is set");
 
   return await new Promise((resolve, reject) => {
     let next = 0, running = 0, done = false;
@@ -135,17 +210,20 @@ async function gemini(system: string, prompt: string, temperature = 0.7, maxToke
     const finish = () => { done = true; clearInterval(hedge); clearTimeout(limit); ctrls.forEach((c) => c.abort()); };
     const launch = () => {
       if (done || next >= models.length) return;
-      const model = models[next++];
+      const c = models[next++];
       const ctrl = new AbortController();
       ctrls.push(ctrl);
       running++;
-      tryModel(model, key, system, prompt, temperature, maxTokens, ctrl.signal)
-        .then((r) => { if (done) return; finish(); resolve(r); })
+      const run = c.provider === "openai"
+        ? tryOpenAI(c.model, system, prompt, temperature, maxTokens, ctrl.signal)
+        : tryGemini(c.model, system, prompt, temperature, maxTokens, ctrl.signal);
+      run
+        .then((r) => { if (done) return; console.log("answered by", c.provider, c.model); finish(); resolve(r); })
         .catch((e) => {
           running--;
           if (done) return;
           lastErr = e instanceof GeminiError ? e : new GeminiError(502, String(e));
-          console.error("gemini fail", model, lastErr.status, lastErr.message.slice(0, 120));
+          console.error("model fail", c.provider, c.model, lastErr.status, lastErr.message.slice(0, 120));
           if (next < models.length) launch();          // 실패하면 바로 다음 모델
           else if (running === 0) { finish(); reject(lastErr); }
         });
@@ -384,7 +462,7 @@ Deno.serve(async (req) => {
       case "letter": return json(await readLetter(b));
       case "polish": return json(await polishReply(b));
       case "tts":    return json(await speech(b));
-      case "ping":   return json({ ok: true, model: Deno.env.get("GEMINI_MODEL") || FALLBACK_MODELS[0] });
+      case "ping":   return json({ ok: true, order: modelOrder() });
       default:       return json({ error: "unknown action" }, 400);
     }
   } catch (e) {
