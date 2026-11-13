@@ -301,6 +301,20 @@ async function chatTurn(b: any) {
   const system =
     `You are Klaudia, a warm English conversation partner in a short spoken chat. ${LEARNER} ` +
     `Speak simply. Ask one question at a time. Keep each line under 20 words. Reply with JSON only.`;
+  const SUGG = `"suggestions": [ {"en": "...", "ko": "..."} ]   // 3 different short answers the learner could say next, at his level, sounding like his own life (empty if ending)`;
+  if (b.suggest_only) {
+    const p0 = `${LEVELS[level]}
+What we know about him:
+${notesText(Array.isArray(b.notes) ? b.notes.slice(0, 15) : [])}
+
+Klaudia just said: "${clip(history.length ? history[history.length - 1].en : "", 300)}"
+
+Return JSON:
+{
+  ${SUGG}
+}`;
+    return await gemini(system, p0, 0.7, 500);
+  }
   const prompt = `Scene: ${clip(b.scene, 200)}
 Topic: ${TOPICS[topic]}
 ${LEVELS[level]}
@@ -320,9 +334,10 @@ Return JSON:
   "help_en": "a simple answer the learner could say next, at his level (empty if ending)",
   "help_ko": "Korean meaning of help_en",
   "said_ko": "what the learner meant in his LAST line, in natural Korean first person (empty if ending)",
+  ${SUGG.replace("say next", "say to Klaudia's new line")},
   "facts": ["new short English facts about the learner from his last line, or empty"]
 }`;
-  return await gemini(system, prompt, 0.7, 1200);
+  return await gemini(system, prompt, 0.7, 1500);
 }
 
 // 편지 읽기 도우미

@@ -163,7 +163,7 @@ async function repeatAfter(target) {
       : s >= 0.5 ? `좋아요! 들린 말: "${alts[0]}"`
       : `한 번 더 해 볼까요? 들린 말: "${alts[0] || ''}"`;
   } catch (err) {
-    if ($('hint')) hint.textContent = err === 'no-speech' ? '멈췄어요. 다시 누르면 처음부터 들어요.' : (LISTEN_ERRORS[err] || '다시 눌러 주세요.');
+    if ($('hint')) hint.textContent = LISTEN_ERRORS[err] || '다시 눌러 주세요.';
   } finally {
     if ($('mic')) micOff(mic);
   }
@@ -243,7 +243,7 @@ async function letterStep(S) {
     on('mic', async () => {
       const mic = $('mic');
       mic.classList.add('recording');
-      $('hint').textContent = '듣고 있어요… 영어로 말씀하세요';
+      $('hint').textContent = '듣고 있어요… 다 말씀하시면 정지를 누르세요';
       try {
         const alts = await listen();
         const d = $('draft');
@@ -498,12 +498,12 @@ function qaStep(S) {
       const mic = $('mic');
       if (micToggleStop(mic)) return;
       micOn(mic);
-      $('hint').textContent = '듣고 있어요… 영어로 말씀하세요';
+      $('hint').textContent = '듣고 있어요… 다 말씀하시면 정지를 누르세요';
       try {
         const alts = await listen();
         if (alts[0]) answered(q, alts[0], 'voice');
       } catch (err) {
-        if ($('hint')) $('hint').textContent = err === 'no-speech' ? '멈췄어요. 다시 눌러 대답해 주세요.' : (LISTEN_ERRORS[err] || '다시 눌러 주세요.');
+        if ($('hint')) $('hint').textContent = LISTEN_ERRORS[err] || '다시 눌러 주세요.';
         if ($('mic')) micOff(mic);
       }
     });
@@ -579,61 +579,105 @@ function talkStep(S) {
   const t = S.c.talk;
   const history = [{ role: 'emma', en: t.opener_en, ko: t.opener_ko }];
   const fh = FIRST_HELP[S.level] || FIRST_HELP[1];
-  let help = { en: fh[0], ko: fh[1] };
+  let sugg = [{ en: fh[0], ko: fh[1] }];
+  let picked = -1;
+  let slide = 0;
   let left = TALK_SECONDS;
   let ended = false, busy = false, waitingNext = false, timeUp = false;
 
-  mount(`<section class="screen talk">
+  mount(`<section class="screen talk2">
     ${header(S, 0)}
-    <div class="talk-top">
-      ${avatar('sm')}
-      <div class="talk-info">
-        <p class="scene">${esc(t.scene_ko || '클라우디아와 이야기해요.')}</p>
-        <p class="timer" id="timer">남은 시간 ${fmt(left)}</p>
+    <p class="timer2" id="timer">남은 시간 ${fmt(left)}</p>
+
+    <div class="stage" id="stage">
+      <div class="bubble-nav">
+        <button class="nav-arrow" id="prevSlide" type="button" aria-label="이전 말">‹</button>
+        <div class="say-bubble" id="sayBubble" aria-live="polite"></div>
+        <button class="nav-arrow" id="nextSlide" type="button" aria-label="다음 말">›</button>
+      </div>
+      <div class="slide-dots" id="dots"></div>
+      ${avatar('xl')}
+    </div>
+
+    <div id="lower">
+      <p class="sugg-title">이렇게 말해 볼까요? <span class="muted">(누르면 들려요)</span></p>
+      <div class="sugg-list" id="sugg"></div>
+    </div>
+
+    <div class="dock">
+      <p class="hint" id="hint"></p>
+      <div class="talk-bottom" id="controls">
+        <button class="round-ghost" id="again" type="button" aria-label="다시 듣기">${ICON.sound}<span>다시 듣기</span></button>
+        ${canListen ? `<button class="mic-round" id="mic" type="button" aria-label="말하기">${ICON.mic}<span>말하기</span></button>` : ''}
+        <span class="round-spacer"></span>
       </div>
     </div>
-    <div class="log" id="log" aria-live="polite"></div>
-    <div id="fbBox"></div>
-    <div id="helpBox"></div>
-    <p class="hint" id="hint"></p>
-    <div class="talk-controls" id="controls">
-      ${canListen ? `<button class="mic" id="mic" type="button">${ICON.mic} 눌러서 말하기</button>` : ''}
-      <div class="row">
-        <button class="plain mid" id="help" type="button">도와주세요</button>
-        <button class="plain mid" id="again" type="button">${ICON.sound} 다시 듣기</button>
-      </div>
-      <form id="typed" class="typed ${canListen ? 'optional' : ''}"><input id="typedIn" type="text" autocomplete="off" placeholder="영어로 적어서 보내도 돼요" aria-label="영어로 적기"><button class="primary" type="submit">보내기</button></form>
-    </div>
+    <form id="typed" class="typed ${canListen ? 'optional' : ''}"><input id="typedIn" type="text" autocomplete="off" placeholder="영어로 적어서 보내도 돼요" aria-label="영어로 적기"><button class="primary" type="submit">보내기</button></form>
   </section>`);
   bindQuit();
 
-  function fmt(s) { return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
-  function lastKlaudia() { for (let i = history.length - 1; i >= 0; i--) if (history[i].role === 'emma' && !history[i].hidden) return history[i]; return null; }
-  function renderLog() {
-    const log = $('log');
-    if (!log) return;
-    log.innerHTML = history.filter((m) => !m.hidden).map((m) => m.role === 'emma'
-      ? `<div class="msg-emma"><span lang="en">${esc(m.en)}</span>${m.ko ? `<small>${esc(m.ko)}</small>` : ''}</div>`
-      : `<div class="msg-me"><span lang="en">${esc(m.en)}</span></div>`).join('');
-    log.scrollTop = log.scrollHeight;
+  function fmt(sec) { return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; }
+  function setHint(x) { if ($('hint')) $('hint').textContent = x; }
+  function lines() { return history.filter((m) => m.role === 'emma' && !m.hidden); }
+  function myReplyAfter(line) {
+    const i = history.indexOf(line);
+    for (let j = i + 1; j < history.length; j++) { if (history[j].role === 'me') return history[j]; if (history[j].role === 'emma') break; }
+    return null;
   }
-  function setHint(s) { if ($('hint')) $('hint').textContent = s; }
+
+  // 클라우디아 말풍선 (좌우로 넘겨 보기)
+  function renderBubble() {
+    const L = lines();
+    if (!L.length || !$('sayBubble')) return;
+    slide = Math.max(0, Math.min(slide, L.length - 1));
+    const m = L[slide];
+    const mine = myReplyAfter(m);
+    $('sayBubble').innerHTML = `<p class="en" lang="en">${esc(m.en)}</p>${m.ko ? `<p class="ko">${esc(m.ko)}</p>` : ''}
+      ${mine ? `<p class="mine"><span>내 대답</span> <span lang="en">${esc(mine.en)}</span></p>` : ''}`;
+    $('dots').innerHTML = L.length > 1 ? L.map((_, i) => `<span class="${i === slide ? 'on' : ''}"></span>`).join('') : '';
+    $('prevSlide').disabled = slide === 0;
+    $('nextSlide').disabled = slide === L.length - 1;
+  }
+  function showLatest() { slide = lines().length - 1; renderBubble(); }
+
+  // 대답 예시 카드
+  function renderSugg() {
+    const box = $('sugg');
+    if (!box) return;
+    box.innerHTML = sugg.slice(0, 3).map((x, i) => `<div class="sugg-card ${i === picked ? 'picked' : ''}">
+        <button class="sugg-main" type="button" data-i="${i}">
+          <span class="en" lang="en">${esc(x.en)}</span>
+          ${x.ko ? `<small>${esc(x.ko)}</small>` : ''}
+        </button>
+        ${i === picked ? `<button class="sugg-send" type="button" data-send="${i}">이 문장으로 대답하기</button>` : ''}
+      </div>`).join('');
+    box.querySelectorAll('.sugg-main').forEach((b) => b.addEventListener('click', () => {
+      picked = Number(b.dataset.i);
+      renderSugg();
+      emma(sugg[picked].en, S);
+    }));
+    box.querySelectorAll('.sugg-send').forEach((b) => b.addEventListener('click', () => send(sugg[Number(b.dataset.send)].en)));
+  }
+  function setSugg(list) {
+    const clean = (Array.isArray(list) ? list : []).filter((x) => x && x.en).slice(0, 3);
+    if (clean.length) { sugg = clean; picked = -1; renderSugg(); }
+  }
 
   // 내 차례: 마이크만 밝게
   function yourTurn() {
     if (ended || busy || waitingNext || !$('controls')) return;
     if (timeUp) return end();
     if (canListen && $('mic')) {
-      setHint('이제 말씀하실 차례예요. 마이크를 누르세요.');
-      spotlight($('mic'), $('hint'));
+      setHint('이제 말씀하실 차례예요');
+      spotlight($('mic'), $('hint'), $('lower'));
     } else {
       setHint('영어로 적어서 보내 주세요.');
-      spotlight($('typed'), $('hint'));
+      spotlight($('typed'), $('hint'), $('lower'));
     }
   }
   async function klaudiaSays(line) {
     clearSpotlight();
-    renderLog();
+    showLatest();
     setHint('');
     await emma(line, S);
     yourTurn();
@@ -644,38 +688,47 @@ function talkStep(S) {
     if (busy || ended || waitingNext || !text) return;
     busy = true;
     clearSpotlight();
-    $('helpBox').innerHTML = '';
     history.push({ role: 'me', en: text });
     S.score.talk++;
-    renderLog();
-    setHint('클라우디아가 듣고 있어요…');
+    renderBubble();
+    $('lower').innerHTML = `<div class="feedback"><p class="label">내가 한 말</p><p class="en" lang="en">${esc(text)}</p><p class="muted">클라우디아가 듣고 있어요…</p></div>`;
+    setHint('');
     try {
       const r = await api.ai('chat', {
         topic: S.topic, level: S.level, scene: t.scene_ko, notes: S.notes,
-        history: history.map(({ role, en }) => ({ role, en })),
+        history: history.filter((m) => !m.hidden).map(({ role, en }) => ({ role, en })),
       });
-      save(S, { kind: 'talk', prompt_en: (lastKlaudia() || {}).en, answer_en: text, better_en: r.fix_en || '', answer_ko: r.said_ko || '' });
+      const prev = lines()[lines().length - 1];
+      save(S, { kind: 'talk', prompt_en: prev ? prev.en : '', answer_en: text, better_en: r.fix_en || '', answer_ko: r.said_ko || '' });
       const reply = r.en ? { role: 'emma', en: r.en, ko: r.ko || '', hidden: true } : null;
       if (reply) { history.push(reply); prefetch(reply.en); }
-      if (r.help_en) help = { en: r.help_en, ko: r.help_ko || '' };
+      const next = Array.isArray(r.suggestions) && r.suggestions.length ? r.suggestions : (r.help_en ? [{ en: r.help_en, ko: r.help_ko || '' }] : []);
       api.addNotes(r.facts, S.topic).catch(() => {});
       if (Array.isArray(r.facts)) S.notes = [...r.facts, ...S.notes].slice(0, 40);
       busy = false;
-      showFeedback(text, r, reply);
+      showFeedback(text, r, reply, next);
     } catch (e) {
       busy = false;
+      restoreLower();
       setHint(api.aiMessage(e));
       showSkip();
     }
   }
 
+  function restoreLower() {
+    if (!$('lower')) return;
+    $('lower').innerHTML = `<p class="sugg-title">이렇게 말해 볼까요? <span class="muted">(누르면 들려요)</span></p><div class="sugg-list" id="sugg"></div>`;
+    renderSugg();
+  }
+
   // 말한 뒤: 피드백과 '다음'만 밝게
-  function showFeedback(text, r, reply) {
-    if (!$('fbBox')) return;
+  const dock = (show) => { const d = document.querySelector('.dock'); if (d) d.hidden = !show; };
+  function showFeedback(text, r, reply, nextSugg) {
+    if (!$('lower')) return;
     waitingNext = true;
-    setHint('');
+    dock(false);
     const better = r.fix_en && !sameSentence(r.fix_en, text);
-    $('fbBox').innerHTML = `<div class="feedback" id="feedback">
+    $('lower').innerHTML = `<div class="feedback" id="feedback">
         <p class="label">내가 한 말</p>
         <p class="en" lang="en">${esc(text)}</p>
         ${r.said_ko ? `<p class="ko">${esc(r.said_ko)}</p>` : ''}
@@ -688,10 +741,13 @@ function talkStep(S) {
       <button class="big primary" id="nextTurn" type="button">다음</button>`;
     on('hearFix', () => emma(r.fix_en, S));
     on('nextTurn', () => {
-      $('fbBox').innerHTML = '';
       waitingNext = false;
-      if (timeUp) { if (reply) reply.hidden = false; return end(); }
-      if (reply) { reply.hidden = false; klaudiaSays(reply.en); } else yourTurn();
+      dock(true);
+      if (nextSugg.length) { sugg = nextSugg.slice(0, 3); picked = -1; }
+      restoreLower();
+      if (reply) reply.hidden = false;
+      if (timeUp) return end();
+      if (reply) klaudiaSays(reply.en); else yourTurn();
     });
     spotlight($('feedback'), $('nextTurn'));
     if (better) prefetch(r.fix_en);
@@ -700,62 +756,69 @@ function talkStep(S) {
   function showSkip() {
     if ($('skip')) return;
     const c = $('controls');
-    if (c) c.insertAdjacentHTML('beforeend', '<button class="plain mid" id="skip" type="button">대화 건너뛰고 마치기</button>');
+    if (c) c.insertAdjacentHTML('afterend', '<button class="plain mid wide" id="skip" type="button">대화 건너뛰고 마치기</button>');
     on('skip', () => nextStep(S));
   }
 
   async function end() {
     if (ended) return;
     ended = true;
+    dock(true);
     clearSpotlight();
     if (state.timer) { clearInterval(state.timer); state.timer = null; }
-    $('helpBox').innerHTML = '';
-    $('fbBox').innerHTML = '';
+    if ($('mic')) stopListening();
+    $('lower').innerHTML = '';
     $('controls').innerHTML = '';
-    renderLog();
     setHint('시간이 다 됐어요. 클라우디아가 인사하고 있어요…');
     let bye = { en: 'It was so nice talking with you. See you tomorrow!', ko: '이야기해서 정말 좋았어요. 내일 또 만나요!' };
     try {
-      const r = await api.ai('chat', { topic: S.topic, level: S.level, scene: t.scene_ko, notes: S.notes, ending: true, history: history.map(({ role, en }) => ({ role, en })) });
+      const r = await api.ai('chat', { topic: S.topic, level: S.level, scene: t.scene_ko, notes: S.notes, ending: true, history: history.filter((m) => !m.hidden).map(({ role, en }) => ({ role, en })) });
       if (r.en) bye = { en: r.en, ko: r.ko || '' };
     } catch (e) { /* 기본 인사 */ }
-    if (!$('log')) return;
+    if (!$('stage')) return;
     history.push({ role: 'emma', ...bye });
-    renderLog();
+    showLatest();
     setHint('');
-    $('controls').innerHTML = '<button class="big primary" id="done" type="button">오늘 공부 마치기</button>';
+    $('controls').innerHTML = '<button class="big primary wide" id="done" type="button">오늘 공부 마치기</button>';
     on('done', () => nextStep(S));
     spotlight($('done'));
     emma(bye.en, S);
   }
 
-  on('again', async () => { const m = lastKlaudia(); if (m) { clearSpotlight(); await emma(m.en, S); yourTurn(); } });
-  on('help', () => {
-    $('helpBox').innerHTML = `<div class="better">
-      <p class="label">이렇게 말해 보세요</p>
-      <p class="en" lang="en">${esc(help.en)}</p>
-      ${help.ko ? `<p class="ko">${esc(help.ko)}</p>` : ''}
-      <div class="row">
-        <button class="plain mid" id="hearHelp" type="button">${ICON.sound} 듣기</button>
-        <button class="primary mid" id="useHelp" type="button">이렇게 말할래요</button>
-      </div>
-    </div>`;
-    on('hearHelp', () => emma(help.en, S));
-    on('useHelp', () => send(help.en));
-    spotlight($('helpBox'), $('mic') || $('typed'));
+  on('prevSlide', () => { slide--; renderBubble(); });
+  on('nextSlide', () => { slide++; renderBubble(); });
+  // 말풍선을 손가락으로 밀어서 넘기기
+  let x0 = null;
+  $('sayBubble').addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+  $('sayBubble').addEventListener('touchend', (e) => {
+    if (x0 == null) return;
+    const dx = e.changedTouches[0].clientX - x0;
+    x0 = null;
+    if (Math.abs(dx) < 40) return;
+    slide += dx < 0 ? 1 : -1;
+    renderBubble();
+  });
+
+  on('again', async () => {
+    const L = lines();
+    const m = L[slide] || L[L.length - 1];
+    if (!m) return;
+    clearSpotlight();
+    await emma(m.en, S);
+    yourTurn();
   });
   on('mic', async () => {
     const mic = $('mic');
     if (micToggleStop(mic)) return;
     if (busy || ended || waitingNext) return;
     micOn(mic);
-    setHint('듣고 있어요… 영어로 말씀하세요');
+    setHint('듣고 있어요… 다 말씀하시면 정지를 누르세요');
     try {
       const alts = await listen();
       setHint('');
       if (alts[0]) send(alts[0]);
     } catch (err) {
-      setHint(err === 'no-speech' ? '멈췄어요. 다시 눌러 말씀해 주세요.' : (LISTEN_ERRORS[err] || '다시 눌러 주세요.'));
+      setHint(LISTEN_ERRORS[err] || '다시 눌러 주세요.');
     } finally {
       if ($('mic')) micOff(mic);
     }
@@ -767,8 +830,13 @@ function talkStep(S) {
     send(v);
   });
 
-  renderLog();
-  setTimeout(() => { if ($('log')) klaudiaSays(t.opener_en); }, 350);
+  showLatest();
+  renderSugg();
+  // 첫 대사에 맞는 대답 예시를 미리 받아 둡니다.
+  api.ai('chat', { topic: S.topic, level: S.level, scene: t.scene_ko, notes: S.notes, suggest_only: true, history: [{ role: 'emma', en: t.opener_en }] })
+    .then((r) => { if (!busy && !waitingNext && Array.isArray(r.suggestions)) setSugg(r.suggestions); })
+    .catch(() => {});
+  setTimeout(() => { if ($('stage')) klaudiaSays(t.opener_en); }, 350);
   state.timer = setInterval(() => {
     left--;
     if ($('timer')) $('timer').textContent = `남은 시간 ${fmt(Math.max(0, left))}`;

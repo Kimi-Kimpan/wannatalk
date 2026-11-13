@@ -189,32 +189,62 @@ let current = null;
 export const LISTEN_ERRORS = {
   'not-allowed': '마이크 사용을 허락해 주세요. 주소창 옆 자물쇠를 눌러 마이크를 켜면 됩니다.',
   'service-not-allowed': '마이크 사용을 허락해 주세요.',
-  'no-speech': '소리가 들리지 않았어요. 버튼을 누르고 말씀해 주세요.',
+  'no-speech': '잘 들리지 않았어요. 다시 누르고 조금 크게 말씀해 주세요.',
   'audio-capture': '마이크를 찾을 수 없어요.',
   'network': '인터넷 연결을 확인해 주세요.',
 };
 
 // 영어로 한 번 듣고, 알아들은 문장 후보들을 돌려줍니다.
-export function listen() {
+// 아이폰은 말을 멈춰도 저절로 끝나지 않거나 최종 결과를 늦게 주는 경우가 있어서,
+// 중간 결과도 모아 두고 조용해지면(1.8초) 스스로 끝냅니다. '정지'를 누르면 그때까지 들은 말로 진행합니다.
+export function listen({ silenceMs = 1800, maxMs = 25000 } = {}) {
   return new Promise((resolve, reject) => {
     if (!SR) return reject('unsupported');
     stopSpeaking();
-    let done = false;
+    let done = false, heardAny = false;
+    let finals = [], lastAlts = [], interim = '';
+    let silence = null;
     const r = new SR();
     r.lang = 'en-US';
-    r.interimResults = false;
+    r.interimResults = true;
+    r.continuous = false;
     r.maxAlternatives = 3;
-    r.onresult = (e) => {
+    const stopSoon = (ms) => { clearTimeout(silence); silence = setTimeout(() => { try { r.stop(); } catch (e) { /* 무시 */ } }, ms); };
+    const finish = () => {
       if (done) return;
       done = true;
-      const alts = [];
-      for (let i = 0; i < e.results[0].length; i++) alts.push(e.results[0][i].transcript.trim());
-      resolve(alts.filter(Boolean));
+      clearTimeout(silence);
+      clearTimeout(cap);
+      current = null;
+      const text = (finals.join(' ') || interim).replace(/\s+/g, ' ').trim();
+      if (!text) return reject('no-speech');
+      resolve(finals.length === 1 && lastAlts.length ? lastAlts : [text]);
     };
-    r.onerror = (e) => { if (!done) { done = true; reject(e.error || 'error'); } };
-    r.onend = () => { if (!done) { done = true; reject('no-speech'); } current = null; };
+    r.onresult = (e) => {
+      finals = []; interim = '';
+      for (let i = 0; i < e.results.length; i++) {
+        const res = e.results[i];
+        if (res.isFinal) {
+          finals.push(res[0].transcript.trim());
+          lastAlts = [];
+          for (let j = 0; j < res.length; j++) lastAlts.push(res[j].transcript.trim());
+          lastAlts = lastAlts.filter(Boolean);
+        } else {
+          interim += res[0].transcript + ' ';
+        }
+      }
+      heardAny = true;
+      stopSoon(silenceMs);
+    };
+    r.onspeechend = () => stopSoon(600);
+    r.onerror = (e) => {
+      if (e.error === 'no-speech' || e.error === 'aborted') return; // onend 에서 정리
+      if (!done) { done = true; clearTimeout(silence); clearTimeout(cap); current = null; reject(e.error || 'error'); }
+    };
+    r.onend = finish;
+    const cap = setTimeout(() => { try { r.stop(); } catch (e) { /* 무시 */ } }, maxMs);
     current = r;
-    try { r.start(); } catch (e) { done = true; reject('error'); }
+    try { r.start(); } catch (e) { done = true; clearTimeout(cap); current = null; reject('error'); }
   });
 }
 
