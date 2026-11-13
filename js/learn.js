@@ -1,6 +1,6 @@
 // 하루 패키지: 편지 → 문장 카드 → 낱말 10개 → 묻고 답하기 → 3분 대화
 import { state, register, go, mount, on, $, esc, topBar, shuffle, today, loading, errorScreen, avatar, tileBuilder, toTiles, ICON, spotlight, clearSpotlight } from './ui.js';
-import { speak, prefetch, setVoiceLevel, listen, canListen, bestSimilarity, sameSentence, LISTEN_ERRORS } from './speech.js';
+import { speak, prefetch, setVoiceLevel, listen, stopListening, canListen, bestSimilarity, sameSentence, LISTEN_ERRORS } from './speech.js';
 import { TOPICS, topicForDay, cycleForDay, SPEECH_RATE } from './content.js';
 import { TALK_SECONDS } from './config.js';
 import * as api from './api.js';
@@ -131,10 +131,29 @@ function save(S, row) {
 }
 
 // 따라 말하기 공통
+// 마이크 버튼: 누르면 '정지'로, 다시 누르면 멈춤
+function micOn(btn) {
+  if (!btn || btn.classList.contains('recording')) return;
+  btn.dataset.label = btn.innerHTML;
+  btn.innerHTML = `${ICON.stop} 정지`;
+  btn.classList.add('recording');
+}
+function micOff(btn) {
+  if (!btn) return;
+  if (btn.dataset.label != null) { btn.innerHTML = btn.dataset.label; delete btn.dataset.label; }
+  btn.classList.remove('recording');
+}
+// 이미 듣고 있으면 멈추고 true
+function micToggleStop(btn) {
+  if (btn && btn.classList.contains('recording')) { stopListening(); return true; }
+  return false;
+}
+
 async function repeatAfter(target) {
   const mic = $('mic'), hint = $('hint');
   if (!mic || !hint) return;
-  mic.classList.add('recording');
+  if (micToggleStop(mic)) return;
+  micOn(mic);
   hint.textContent = '듣고 있어요… 말씀하세요';
   try {
     const alts = await listen();
@@ -144,9 +163,9 @@ async function repeatAfter(target) {
       : s >= 0.5 ? `좋아요! 들린 말: "${alts[0]}"`
       : `한 번 더 해 볼까요? 들린 말: "${alts[0] || ''}"`;
   } catch (err) {
-    if ($('hint')) hint.textContent = LISTEN_ERRORS[err] || '다시 눌러 주세요.';
+    if ($('hint')) hint.textContent = err === 'no-speech' ? '멈췄어요. 다시 누르면 처음부터 들어요.' : (LISTEN_ERRORS[err] || '다시 눌러 주세요.');
   } finally {
-    if ($('mic')) mic.classList.remove('recording');
+    if ($('mic')) micOff(mic);
   }
 }
 
@@ -315,24 +334,38 @@ function cardsStep(S) {
         <p class="en" lang="en">${esc(it.en)}</p>
         ${it.say ? `<p class="say">${esc(it.say)}</p>` : ''}
       </div>
-      <div class="listen-row">
-        <button class="listen" id="play" type="button">${ICON.sound} 듣기</button>
+      <div class="listen-row with-coach">
+        <div class="coach-wrap grow">
+          <span class="coach" id="coachListen" role="status">듣고 나서 따라 말해 보세요</span>
+          <button class="listen" id="play" type="button">${ICON.sound} 듣기</button>
+        </div>
         <button class="slow" id="slow" type="button">천천히<br>듣기</button>
       </div>
-      ${canListen ? `<button class="mic" id="mic" type="button">${ICON.mic} 따라 말하기</button>` : ''}
-      <p class="hint" id="hint" aria-live="polite">듣고 나서 큰 소리로 따라 말해 보세요.</p>
+      ${canListen ? `<div class="coach-wrap">
+          <span class="coach below" id="coachMic" role="status" hidden>눌러서 말하기를 시작해 보세요</span>
+          <button class="mic" id="mic" type="button">${ICON.mic} 따라 말하기</button>
+        </div>` : ''}
+      <p class="hint" id="hint" aria-live="polite"></p>
       <div class="nav">
         <button class="prev" id="prev" type="button" ${k === 0 ? 'disabled' : ''}>이전</button>
         <button class="next" id="next" type="button">${k === cards.length - 1 ? '다 했어요' : '다음'}</button>
       </div>
     </section>`);
     bindQuit();
-    on('play', () => say(it.en, S));
-    on('slow', () => say(it.en, S, 'play', true));
-    on('mic', () => repeatAfter(it.en));
+    // 듣기를 누르면 듣기 말풍선은 사라지고, 따라 말하기 말풍선이 나타나요
+    const heard = () => {
+      if ($('coachListen')) $('coachListen').hidden = true;
+      if ($('coachMic') && !$('mic').classList.contains('used')) $('coachMic').hidden = false;
+    };
+    on('play', () => { heard(); say(it.en, S); });
+    on('slow', () => { heard(); say(it.en, S, 'play', true); });
+    on('mic', () => {
+      if ($('coachMic')) $('coachMic').hidden = true;
+      $('mic').classList.add('used');
+      repeatAfter(it.en);
+    });
     on('prev', () => { if (k > 0) { k--; render(); } });
     on('next', () => { if (k < cards.length - 1) { k++; render(); } else nextStep(S); });
-    setTimeout(() => { if ($('play')) say(it.en, S); }, 350);
     if (cards[k + 1]) prefetch(cards[k + 1].en);
     else if (S.c.questions[0]) prefetch(S.c.questions[0].en);
   }
@@ -463,14 +496,15 @@ function qaStep(S) {
     document.querySelectorAll('.choice').forEach((b) => b.addEventListener('click', () => answered(q, q.choices[Number(b.dataset.j)].en, 'choice', q.choices[Number(b.dataset.j)].ko)));
     on('mic', async () => {
       const mic = $('mic');
-      mic.classList.add('recording');
+      if (micToggleStop(mic)) return;
+      micOn(mic);
       $('hint').textContent = '듣고 있어요… 영어로 말씀하세요';
       try {
         const alts = await listen();
         if (alts[0]) answered(q, alts[0], 'voice');
       } catch (err) {
-        if ($('hint')) $('hint').textContent = LISTEN_ERRORS[err] || '다시 눌러 주세요.';
-        if ($('mic')) mic.classList.remove('recording');
+        if ($('hint')) $('hint').textContent = err === 'no-speech' ? '멈췄어요. 다시 눌러 대답해 주세요.' : (LISTEN_ERRORS[err] || '다시 눌러 주세요.');
+        if ($('mic')) micOff(mic);
       }
     });
     const typed = $('typed');
@@ -711,18 +745,19 @@ function talkStep(S) {
     spotlight($('helpBox'), $('mic') || $('typed'));
   });
   on('mic', async () => {
-    if (busy || ended || waitingNext) return;
     const mic = $('mic');
-    mic.classList.add('recording');
+    if (micToggleStop(mic)) return;
+    if (busy || ended || waitingNext) return;
+    micOn(mic);
     setHint('듣고 있어요… 영어로 말씀하세요');
     try {
       const alts = await listen();
       setHint('');
       if (alts[0]) send(alts[0]);
     } catch (err) {
-      setHint(LISTEN_ERRORS[err] || '다시 눌러 주세요.');
+      setHint(err === 'no-speech' ? '멈췄어요. 다시 눌러 말씀해 주세요.' : (LISTEN_ERRORS[err] || '다시 눌러 주세요.'));
     } finally {
-      if ($('mic')) mic.classList.remove('recording');
+      if ($('mic')) micOff(mic);
     }
   });
   $('typed').addEventListener('submit', (e) => {

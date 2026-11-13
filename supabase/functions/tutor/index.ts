@@ -384,14 +384,14 @@ async function speech(b: any) {
   const text = clip(b.text, 500).trim();
   if (!text) throw new GeminiError(400, "empty text");
   const voice = Deno.env.get("TTS_VOICE") || "Sulafat";
-  const pace = PACE[levelOf(b.level)];
   let lastErr: GeminiError | null = null;
   for (const model of TTS_MODELS) {
     const t0 = Date.now();
     let res: Response;
     try {
       res = await callGemini(model, key, {
-        contents: [{ role: "user", parts: [{ text: `Read this aloud in a warm, kind, friendly female voice, like a patient English teacher speaking to an older beginner, ${pace}:\n${text}` }] }],
+        // 지시문을 붙이면 그 문장까지 소리 내어 읽어서, 읽을 문장만 보냅니다.
+        contents: [{ role: "user", parts: [{ text }] }],
         generationConfig: {
           responseModalities: ["AUDIO"],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },

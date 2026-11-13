@@ -28,9 +28,25 @@ export const canSpeak = !!(synth && window.SpeechSynthesisUtterance);
 let talkingEl = null;
 let audioEl = null;
 let token = 0;
+const STOP_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>';
 function setTalking(on) {
   document.querySelectorAll('.avatar').forEach((a) => a.classList.toggle('talking', on));
-  if (talkingEl) talkingEl.classList.toggle('playing', on);
+}
+// 듣기 버튼을 누르면 '멈추기'로, 끝나면 원래대로
+function markButton(btn, on) {
+  if (!btn) return;
+  if (on) {
+    if (btn.dataset.busy === '1') return;
+    btn.dataset.busy = '1';
+    btn.dataset.label = btn.innerHTML;
+    btn.innerHTML = `${STOP_ICON} 멈추기`;
+    btn.classList.add('playing');
+  } else {
+    if (btn.dataset.busy !== '1') return;
+    btn.dataset.busy = '';
+    if (btn.dataset.label != null) btn.innerHTML = btn.dataset.label;
+    btn.classList.remove('playing', 'loading');
+  }
 }
 
 export function stopSpeaking() {
@@ -38,6 +54,7 @@ export function stopSpeaking() {
   try { if (synth) synth.cancel(); } catch (e) { /* 무시 */ }
   try { if (audioEl) { audioEl.pause(); audioEl = null; } } catch (e) { /* 무시 */ }
   setTalking(false);
+  markButton(talkingEl, false);
   talkingEl = null;
 }
 
@@ -52,9 +69,8 @@ function deviceSpeak(text, { rate = 0.85, button = null } = {}) {
       if (voice) u.voice = voice;
       u.rate = rate;
       u.pitch = 1;
-      talkingEl = button;
       let done = false;
-      const finish = () => { if (done) return; done = true; setTalking(false); talkingEl = null; resolve(true); };
+      const finish = () => { if (done) return; done = true; setTalking(false); if (talkingEl === button) { markButton(button, false); talkingEl = null; } resolve(true); };
       u.onstart = () => setTalking(true);
       u.onend = finish;
       u.onerror = finish;
@@ -91,7 +107,7 @@ function pcmToWav(b64, mime) {
 }
 
 function cacheKey(text) {
-  return location.origin + '/__tts/v1/' + (voiceLevel <= 1 ? 1 : voiceLevel <= 3 ? 2 : 4) + '/' + encodeURIComponent(text.slice(0, 300));
+  return location.origin + '/__tts/v2/' + (voiceLevel <= 1 ? 1 : voiceLevel <= 3 ? 2 : 4) + '/' + encodeURIComponent(text.slice(0, 300));
 }
 
 // 소리 파일 주소를 돌려줍니다. 한 번 받은 소리는 기기에 저장해 다시 쓰지 않습니다.
@@ -129,10 +145,10 @@ function playUrl(url, { rate = 0.85, button = null } = {}, my) {
     if (my !== token) return resolve(false);
     const a = new Audio(url);
     audioEl = a;
-    a.playbackRate = rate <= 0.6 ? 0.78 : 1;
-    talkingEl = button;
+    // 천천히 듣기는 더 느리게, 1~2단계는 조금 느리게
+    a.playbackRate = rate <= 0.6 ? 0.75 : voiceLevel <= 2 ? 0.9 : 1;
     let done = false;
-    const finish = (ok) => { if (done) return; done = true; if (audioEl === a) audioEl = null; setTalking(false); talkingEl = null; resolve(ok); };
+    const finish = (ok) => { if (done) return; done = true; if (audioEl === a) audioEl = null; setTalking(false); if (ok !== false && talkingEl === button) { markButton(button, false); talkingEl = null; } resolve(ok); };
     a.onplay = () => setTalking(true);
     a.onended = () => finish(true);
     a.onerror = () => finish(false);
@@ -144,8 +160,11 @@ function playUrl(url, { rate = 0.85, button = null } = {}, my) {
 // 영어 문장을 읽어 줍니다. natural:true 면 Gemini 목소리. 끝나면 resolve.
 export async function speak(text, opts = {}) {
   if (!text) return false;
+  // 읽는 중에 같은 버튼을 다시 누르면 멈추기
+  if (opts.button && opts.button.dataset.busy === '1') { stopSpeaking(); return false; }
   stopSpeaking();
   const my = token;
+  if (opts.button) { talkingEl = opts.button; markButton(opts.button, true); }
   if (opts.natural && naturalOK) {
     if (opts.button) opts.button.classList.add('loading');
     try {

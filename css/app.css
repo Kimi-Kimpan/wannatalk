@@ -126,7 +126,7 @@ input.code { font-family: var(--font-en); font-size: 34px; letter-spacing: 8px; 
 .listen { flex: 2; min-height: 84px; border-radius: 20px; background: var(--listen); color: var(--listen-ink); font-size: 28px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 12px; box-shadow: 0 4px 0 rgba(0,0,0,.2); }
 .listen svg { width: 34px; height: 34px; }
 .screen > .listen { flex: none; }
-.listen.loading, .ghost.loading { opacity: .65; }
+.ghost.loading { opacity: .65; }
 .admin-link { text-decoration: none; color: inherit; margin-bottom: 10px; }
 .listen.playing { outline: 5px solid var(--primary); outline-offset: 3px; }
 .slow { flex: 1; min-height: 84px; border-radius: 20px; background: var(--card); border: 3px solid var(--listen); font-size: 21px; font-weight: 700; line-height: 1.2; }
@@ -245,6 +245,23 @@ input.code { font-family: var(--font-en); font-size: 34px; letter-spacing: 8px; 
 .link-btn { align-self: center; min-height: 52px; padding: 6px 12px; font-size: 19px; font-weight: 700; color: var(--ink-soft); text-decoration: underline; text-underline-offset: 4px; }
 .mode-pill { font-size: 17px; font-weight: 700; padding: 6px 14px; border-radius: 99px; background: var(--tint); color: var(--primary); }
 .mode-pill.admin { background: var(--ink); color: var(--paper); }
+
+/* 말풍선 안내 */
+.coach-wrap { position: relative; display: flex; flex-direction: column; }
+.coach-wrap.grow { flex: 2; }
+.coach-wrap > .listen, .coach-wrap > .mic { width: 100%; }
+.coach { position: absolute; left: 50%; bottom: calc(100% + 12px); transform: translateX(-50%); z-index: 2;
+  background: var(--ink); color: var(--paper); font-size: 19px; font-weight: 700; line-height: 1.3;
+  padding: 10px 16px; border-radius: 14px; white-space: nowrap; box-shadow: 0 6px 16px rgba(0,0,0,.18);
+  animation: bob 1.6s ease-in-out infinite; pointer-events: none; }
+.coach::after { content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
+  border: 9px solid transparent; border-top-color: var(--ink); }
+.coach[hidden] { display: none; }
+.coach.below { bottom: auto; top: calc(100% + 12px); }
+.coach.below::after { top: auto; bottom: 100%; border-top-color: transparent; border-bottom-color: var(--ink); }
+.listen-row.with-coach { margin-top: 48px; }
+@keyframes bob { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, -5px); } }
+@media (max-width: 400px) { .coach { font-size: 17px; padding: 8px 12px; } }
 
 /* 로그인: 링크 붙여넣기 */
 .alt-login summary { cursor: pointer; font-weight: 700; font-size: 19px; color: var(--ink-soft); min-height: 44px; display: flex; align-items: center; }
