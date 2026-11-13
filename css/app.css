@@ -370,3 +370,42 @@ input.code { font-family: var(--font-en); font-size: 34px; letter-spacing: 8px; 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* 한 화면에 다 들어가게: 아래 넘기기 버튼은 항상 화면 안에 */
+.nav { position: sticky; bottom: 0; z-index: 3; background: var(--paper); padding: 8px 0 calc(4px + env(safe-area-inset-bottom)); }
+.screen.fit { gap: 12px; }
+.screen.fit .listen-row.with-coach { margin-top: 40px; }
+.screen.fit .listen, .screen.fit .slow { min-height: 72px; }
+.screen.fit .mic { min-height: 68px; }
+.screen.fit .hint { min-height: 26px; }
+.screen.fit .card.word { padding: 14px 16px; gap: 6px; }
+.screen.fit .card.word .big-emoji { font-size: 56px; }
+.screen.fit .choice { min-height: 68px; }
+
+/* 문장 카드: 배경 없이 글자만 */
+.sentence { display: flex; flex-direction: column; gap: 8px; text-align: center; padding: 4px 4px 0; }
+.sentence .ko { font-size: 23px; color: var(--ink-soft); font-weight: 500; }
+.sentence .en { font-weight: 700; font-size: clamp(30px, 7vw, 44px); line-height: 1.2; text-wrap: balance; overflow-wrap: anywhere; }
+@media (max-height: 740px) {
+  .sentence .en { font-size: clamp(26px, 6.5vw, 36px); }
+  .screen.fit .listen, .screen.fit .slow { min-height: 64px; }
+  .screen.fit .mic { min-height: 60px; }
+  .nav button { min-height: 66px; }
+}
+
+/* 잘했을 때 */
+.cheer { display: inline-block; color: var(--good); font-weight: 700; font-size: 24px; animation: pop .5s ease-out; }
+@keyframes pop { 0% { transform: scale(.6); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); } }
+.confetti { position: fixed; width: 0; height: 0; z-index: 50; pointer-events: none; }
+.confetti i { position: absolute; left: -5px; top: -4px; width: 10px; height: 8px; border-radius: 2px; opacity: 0; animation: burst 1.2s cubic-bezier(.2,.7,.3,1) forwards; }
+@keyframes burst {
+  0% { transform: translate(0, 0) rotate(0); opacity: 1; }
+  70% { opacity: 1; }
+  100% { transform: translate(var(--dx), calc(var(--dy) + 60px)) rotate(var(--rot)); opacity: 0; }
+}
+
+/* 마이크: 들리는 소리 크기만큼 테두리가 커져요 / 알아듣는 중 */
+.mic.recording, .mic-round.recording { animation: none; box-shadow: 0 0 0 calc(4px + var(--lvl, 0) * 18px) rgba(179,38,30,.25); transition: box-shadow .08s linear; }
+.mic.thinking, .mic-round.thinking { background: var(--tint); border-color: var(--primary); color: var(--primary); animation: none; opacity: .9; }
+.mic-round.thinking span { font-size: 14px; }
+.mic.spot.recording, .mic-round.spot.recording { animation: none; }

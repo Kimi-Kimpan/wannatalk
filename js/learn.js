@@ -1,6 +1,6 @@
 // 하루 패키지: 편지 → 문장 카드 → 낱말 10개 → 묻고 답하기 → 3분 대화
-import { state, register, go, mount, on, $, esc, topBar, shuffle, today, loading, errorScreen, avatar, tileBuilder, toTiles, ICON, spotlight, clearSpotlight } from './ui.js';
-import { speak, prefetch, setVoiceLevel, listen, stopListening, canListen, bestSimilarity, sameSentence, LISTEN_ERRORS } from './speech.js';
+import { state, register, go, mount, on, $, esc, topBar, shuffle, today, loading, errorScreen, avatar, tileBuilder, toTiles, ICON, spotlight, clearSpotlight, hear, celebrate } from './ui.js';
+import { speak, prefetch, setVoiceLevel, cancelListening, canListen, bestSimilarity, sameSentence } from './speech.js';
 import { TOPICS, topicForDay, cycleForDay, SPEECH_RATE } from './content.js';
 import { TALK_SECONDS } from './config.js';
 import * as api from './api.js';
@@ -39,7 +39,10 @@ function tidy(c) {
     en: str(q.en), ko: str(q.ko),
     choices: (Array.isArray(q.choices) ? q.choices : []).slice(0, 3).map((x) => ({ en: str(x.en), ko: str(x.ko) })).filter((x) => x.en),
   })).filter((q) => q.en);
-  c.talk = { scene_ko: str(c.talk.scene_ko), opener_en: str(c.talk.opener_en), opener_ko: str(c.talk.opener_ko) };
+  c.talk = {
+    scene_ko: str(c.talk.scene_ko), opener_en: str(c.talk.opener_en), opener_ko: str(c.talk.opener_ko),
+    suggestions: (Array.isArray(c.talk.suggestions) ? c.talk.suggestions : []).slice(0, 3).map((x) => ({ en: str(x && x.en), ko: str(x && x.ko) })).filter((x) => x.en),
+  };
   c.title_ko = str(c.title_ko);
   return c;
 }
@@ -120,52 +123,28 @@ function bindQuit() {
   });
 }
 function say(text, S, btnId = 'play', slow = false) {
-  return speak(text, { rate: slow ? 0.55 : S.rate, button: $(btnId), natural: true });
+  return speak(text, { rate: slow ? 0.55 : S.rate, button: $(btnId), restart: slow });
 }
-// Klaudia 목소리로 말하기
+// Klaudia 목소리로 말하기. 끝까지 말했으면 true, 중간에 멈췄으면 false
 function emma(text, S) {
-  return speak(text, { rate: S.rate, natural: true });
+  return speak(text, { rate: S.rate });
 }
 function save(S, row) {
   api.addEntry({ day: S.day, topic: S.topic, ...row }).catch(() => {});
 }
 
-// 따라 말하기 공통
-// 마이크 버튼: 누르면 '정지'로, 다시 누르면 멈춤
-function micOn(btn) {
-  if (!btn || btn.classList.contains('recording')) return;
-  btn.dataset.label = btn.innerHTML;
-  btn.innerHTML = `${ICON.stop} 정지`;
-  btn.classList.add('recording');
-}
-function micOff(btn) {
-  if (!btn) return;
-  if (btn.dataset.label != null) { btn.innerHTML = btn.dataset.label; delete btn.dataset.label; }
-  btn.classList.remove('recording');
-}
-// 이미 듣고 있으면 멈추고 true
-function micToggleStop(btn) {
-  if (btn && btn.classList.contains('recording')) { stopListening(); return true; }
-  return false;
-}
-
+// 따라 말하기: 잘 따라 하면 작은 팡파레
 async function repeatAfter(target) {
   const mic = $('mic'), hint = $('hint');
   if (!mic || !hint) return;
-  if (micToggleStop(mic)) return;
-  micOn(mic);
-  hint.textContent = '듣고 있어요… 말씀하세요';
-  try {
-    const alts = await listen();
-    const s = bestSimilarity(target, alts);
-    if (!$('hint')) return;
-    hint.textContent = s >= 0.8 ? '아주 잘하셨어요! 👏'
-      : s >= 0.5 ? `좋아요! 들린 말: "${alts[0]}"`
-      : `한 번 더 해 볼까요? 들린 말: "${alts[0] || ''}"`;
-  } catch (err) {
-    if ($('hint')) hint.textContent = LISTEN_ERRORS[err] || '다시 눌러 주세요.';
-  } finally {
-    if ($('mic')) micOff(mic);
+  const alts = await hear(mic, hint);
+  if (!alts || !hint.isConnected) return;
+  const s = bestSimilarity(target, alts);
+  if (s >= 0.8) {
+    hint.innerHTML = '<span class="cheer">🎉 아주 잘하셨어요! 🎉</span>';
+    celebrate(hint);
+  } else {
+    hint.textContent = s >= 0.5 ? `좋아요! 들린 말: "${alts[0]}"` : `한 번 더 해 볼까요? 들린 말: "${alts[0] || ''}"`;
   }
 }
 
@@ -241,19 +220,11 @@ async function letterStep(S) {
       on('clear', () => { tb.clear(); $('draft').value = ''; });
     }
     on('mic', async () => {
-      const mic = $('mic');
-      mic.classList.add('recording');
-      $('hint').textContent = '듣고 있어요… 다 말씀하시면 정지를 누르세요';
-      try {
-        const alts = await listen();
-        const d = $('draft');
-        d.value = (d.value ? d.value.trim() + ' ' : '') + (alts[0] || '');
-        $('hint').textContent = '적었어요. 틀린 곳은 고쳐도 돼요.';
-      } catch (err) {
-        if ($('hint')) $('hint').textContent = LISTEN_ERRORS[err] || '다시 눌러 주세요.';
-      } finally {
-        if ($('mic')) mic.classList.remove('recording');
-      }
+      const hint = $('hint'), d = $('draft');
+      const alts = await hear($('mic'), hint, { listening: '듣고 있어요… 다 말씀하시면 정지를 누르세요', silenceMs: 2500 });
+      if (!alts || !d.isConnected) return;
+      d.value = (d.value ? d.value.trim() + ' ' : '') + (alts[0] || '');
+      hint.textContent = '적었어요. 틀린 곳은 고쳐도 돼요.';
     });
     on('back', read);
     on('check', () => {
@@ -326,9 +297,9 @@ function cardsStep(S) {
   function render() {
     const it = cards[k];
     mark(S, k);
-    mount(`<section class="screen">
+    mount(`<section class="screen fit">
       ${header(S, k / cards.length)}
-      <div class="card">
+      <div class="sentence">
         <p class="count">${k + 1} <span>/ ${cards.length}</span></p>
         <p class="ko">${esc(it.ko)}</p>
         <p class="en" lang="en">${esc(it.en)}</p>
@@ -383,7 +354,7 @@ function wordsStep(S) {
   function learn() {
     const w = words[k];
     mark(S, k);
-    mount(`<section class="screen">
+    mount(`<section class="screen fit">
       ${header(S, k / total)}
       <div class="card word">
         <p class="count">${k + 1} <span>/ ${words.length}</span></p>
@@ -393,6 +364,8 @@ function wordsStep(S) {
         ${w.say ? `<p class="say">${esc(w.say)}</p>` : ''}
       </div>
       <button class="listen" id="play" type="button">${ICON.sound} 듣기</button>
+      ${canListen ? `<button class="mic" id="mic" type="button">${ICON.mic} 따라 말하기</button>` : ''}
+      <p class="hint" id="hint" aria-live="polite"></p>
       <div class="nav">
         <button class="prev" id="prev" type="button" ${k === 0 ? 'disabled' : ''}>이전</button>
         <button class="next" id="next" type="button">${k === words.length - 1 ? '문제 풀기' : '다음'}</button>
@@ -400,45 +373,62 @@ function wordsStep(S) {
     </section>`);
     bindQuit();
     on('play', () => say(w.en, S));
+    on('mic', () => repeatAfter(w.en));
     on('prev', () => { if (k > 0) { k--; learn(); } });
     on('next', () => { if (k < words.length - 1) { k++; learn(); } else quiz(0); });
     setTimeout(() => { if ($('play')) say(w.en, S); }, 300);
   }
 
+  // 문제마다 보기와 고른 답을 기억해서 이전/다음으로 오가도 그대로 보여요.
+  const quizState = qs.map(() => null);
   function quiz(qi) {
     if (qi >= qs.length) return nextStep(S);
     const q = qs[qi];
-    const others = shuffle(words.filter((w) => w.en !== q.en)).slice(0, nOpt - 1);
-    const opts = shuffle([q, ...others]);
-    mount(`<section class="screen">
+    if (!quizState[qi]) {
+      const others = shuffle(words.filter((w) => w.en !== q.en)).slice(0, nOpt - 1);
+      quizState[qi] = { opts: shuffle([q, ...others]), picked: null };
+    }
+    const st = quizState[qi];
+    const opts = st.opts;
+    mount(`<section class="screen fit">
       ${header(S, (words.length + qi) / total)}
       <p class="lead">잘 듣고 맞는 뜻을 고르세요. <span class="muted">(${qi + 1}/${qs.length})</span></p>
       <button class="listen" id="play" type="button">${ICON.sound} 다시 듣기</button>
       <div class="choices">${opts.map((o, j) => `<button class="choice" type="button" data-j="${j}"><span class="emoji" aria-hidden="true">${esc(o.emoji || '')}</span>${esc(o.ko)}</button>`).join('')}</div>
       <p class="hint" id="hint" aria-live="polite"></p>
-      <div id="after"></div>
+      <div class="nav">
+        <button class="prev" id="qprev" type="button">이전</button>
+        <button class="next" id="qnext" type="button" ${st.picked == null ? 'disabled' : ''}>${qi === qs.length - 1 ? '다 했어요' : '다음'}</button>
+      </div>
     </section>`);
     bindQuit();
-    on('play', () => say(q.en, S));
-    setTimeout(() => { if ($('play')) say(q.en, S); }, 300);
     const buttons = document.querySelectorAll('.choice');
-    buttons.forEach((b) => b.addEventListener('click', () => {
-      buttons.forEach((x) => (x.disabled = true));
-      const pick = opts[Number(b.dataset.j)];
+    function showResult(celebrateNow) {
+      const pick = opts[st.picked];
       const right = pick.en === q.en;
+      buttons.forEach((x) => {
+        x.disabled = true;
+        const o = opts[Number(x.dataset.j)];
+        if (o.en === q.en) x.classList.add('right');
+        else if (Number(x.dataset.j) === st.picked) x.classList.add('wrong');
+      });
+      $('hint').textContent = right ? `맞았어요! 👏  ${q.en} = ${q.ko}` : `정답은 "${q.ko}"이에요.`;
+      $('qnext').disabled = false;
+      if (right && celebrateNow) celebrate($('hint'));
+      spotlight($('qnext'), $('hint'), document.querySelector('.choices'));
+    }
+    on('play', () => say(q.en, S));
+    on('qprev', () => { if (qi > 0) quiz(qi - 1); else { k = words.length - 1; learn(); } });
+    on('qnext', () => { if (st.picked != null) quiz(qi + 1); });
+    buttons.forEach((b) => b.addEventListener('click', () => {
+      if (st.picked != null) return;
+      st.picked = Number(b.dataset.j);
       S.score.words[1]++;
-      buttons.forEach((x) => { if (opts[Number(x.dataset.j)].en === q.en) x.classList.add('right'); });
-      if (right) {
-        S.score.words[0]++;
-        $('hint').textContent = `맞았어요! 👏  ${q.en} = ${q.ko}`;
-        setTimeout(() => { if ($('hint')) quiz(qi + 1); }, 1300);
-      } else {
-        b.classList.add('wrong');
-        $('hint').textContent = `정답은 "${q.ko}"이에요.`;
-        $('after').innerHTML = '<button class="big primary" id="go" type="button">다음</button>';
-        on('go', () => quiz(qi + 1));
-      }
+      if (opts[st.picked].en === q.en) S.score.words[0]++;
+      showResult(true);
     }));
+    if (st.picked != null) showResult(false);
+    else setTimeout(() => { if ($('play')) say(q.en, S); }, 300);
   }
 
   learn();
@@ -488,24 +478,15 @@ function qaStep(S) {
       </div>
     </section>`);
     bindQuit();
-    const play = async () => { clearSpotlight(); await emma(q.en, S); yourTurn(); };
+    const play = async () => { clearSpotlight(); if (await emma(q.en, S)) yourTurn(); };
     on('again', play);
     setTimeout(() => { if ($('again')) play(); }, 350);
     if (qs[k + 1]) prefetch(qs[k + 1].en);
     else if (S.c.talk && S.c.talk.opener_en) prefetch(S.c.talk.opener_en);
     document.querySelectorAll('.choice').forEach((b) => b.addEventListener('click', () => answered(q, q.choices[Number(b.dataset.j)].en, 'choice', q.choices[Number(b.dataset.j)].ko)));
     on('mic', async () => {
-      const mic = $('mic');
-      if (micToggleStop(mic)) return;
-      micOn(mic);
-      $('hint').textContent = '듣고 있어요… 다 말씀하시면 정지를 누르세요';
-      try {
-        const alts = await listen();
-        if (alts[0]) answered(q, alts[0], 'voice');
-      } catch (err) {
-        if ($('hint')) $('hint').textContent = LISTEN_ERRORS[err] || '다시 눌러 주세요.';
-        if ($('mic')) micOff(mic);
-      }
+      const alts = await hear($('mic'), $('hint'), { listening: '듣고 있어요… 말이 끝나면 저절로 넘어가요' });
+      if (alts && alts[0] && $('area') && !$('feedback')) answered(q, alts[0], 'voice');
     });
     const typed = $('typed');
     if (typed) typed.addEventListener('submit', (e) => {
@@ -579,7 +560,7 @@ function talkStep(S) {
   const t = S.c.talk;
   const history = [{ role: 'emma', en: t.opener_en, ko: t.opener_ko }];
   const fh = FIRST_HELP[S.level] || FIRST_HELP[1];
-  let sugg = [{ en: fh[0], ko: fh[1] }];
+  let sugg = t.suggestions && t.suggestions.length ? t.suggestions.slice(0, 3) : [{ en: fh[0], ko: fh[1] }];
   let picked = -1;
   let slide = 0;
   let left = TALK_SECONDS;
@@ -679,8 +660,7 @@ function talkStep(S) {
     clearSpotlight();
     showLatest();
     setHint('');
-    await emma(line, S);
-    yourTurn();
+    if (await emma(line, S)) yourTurn();
   }
 
   async function send(text) {
@@ -766,7 +746,7 @@ function talkStep(S) {
     dock(true);
     clearSpotlight();
     if (state.timer) { clearInterval(state.timer); state.timer = null; }
-    if ($('mic')) stopListening();
+    cancelListening();
     $('lower').innerHTML = '';
     $('controls').innerHTML = '';
     setHint('시간이 다 됐어요. 클라우디아가 인사하고 있어요…');
@@ -804,24 +784,16 @@ function talkStep(S) {
     const m = L[slide] || L[L.length - 1];
     if (!m) return;
     clearSpotlight();
-    await emma(m.en, S);
-    yourTurn();
+    if (await emma(m.en, S)) yourTurn();
   });
   on('mic', async () => {
     const mic = $('mic');
-    if (micToggleStop(mic)) return;
-    if (busy || ended || waitingNext) return;
-    micOn(mic);
-    setHint('듣고 있어요… 다 말씀하시면 정지를 누르세요');
-    try {
-      const alts = await listen();
-      setHint('');
-      if (alts[0]) send(alts[0]);
-    } catch (err) {
-      setHint(LISTEN_ERRORS[err] || '다시 눌러 주세요.');
-    } finally {
-      if ($('mic')) micOff(mic);
-    }
+    if (!mic.classList.contains('recording') && (busy || ended || waitingNext)) return;
+    clearSpotlight();
+    const alts = await hear(mic, $('hint'), { listening: '듣고 있어요… 말이 끝나면 저절로 보내져요' });
+    if (!alts || !alts[0]) return;
+    setHint('');
+    send(alts[0]);
   });
   $('typed').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -833,9 +805,11 @@ function talkStep(S) {
   showLatest();
   renderSugg();
   // 첫 대사에 맞는 대답 예시를 미리 받아 둡니다.
-  api.ai('chat', { topic: S.topic, level: S.level, scene: t.scene_ko, notes: S.notes, suggest_only: true, history: [{ role: 'emma', en: t.opener_en }] })
-    .then((r) => { if (!busy && !waitingNext && Array.isArray(r.suggestions)) setSugg(r.suggestions); })
-    .catch(() => {});
+  if (!(t.suggestions && t.suggestions.length)) {
+    api.ai('chat', { topic: S.topic, level: S.level, scene: t.scene_ko, notes: S.notes, suggest_only: true, history: [{ role: 'emma', en: t.opener_en }] })
+      .then((r) => { if (!busy && !waitingNext && Array.isArray(r.suggestions)) setSugg(r.suggestions); })
+      .catch(() => {});
+  }
   setTimeout(() => { if ($('stage')) klaudiaSays(t.opener_en); }, 350);
   state.timer = setInterval(() => {
     left--;

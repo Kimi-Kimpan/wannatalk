@@ -15,9 +15,9 @@ export class AIError extends Error {
 }
 
 // AI 선생님 호출
-export async function ai(action, payload = {}) {
+export async function ai(action, payload = {}, ms = 100000) {
   let timer;
-  const timeout = new Promise((_, rej) => { timer = setTimeout(() => rej(new AIError('timeout')), 100000); });
+  const timeout = new Promise((_, rej) => { timer = setTimeout(() => rej(new AIError('timeout')), ms); });
   let data, error;
   try {
     ({ data, error } = await Promise.race([sb.functions.invoke('tutor', { body: { action, ...payload } }), timeout]));
@@ -88,6 +88,8 @@ export async function currentUser() {
   return data.session ? data.session.user : null;
 }
 export async function signOut() {
+  seenFacts.clear();
+  factsLoaded = false;
   await sb.auth.signOut();
 }
 
@@ -125,11 +127,21 @@ export async function recentNotes(limit = 40) {
   if (error) return [];
   return (data || []).map((r) => r.fact);
 }
+// 이미 적어 둔 사실은 다시 적지 않습니다.
+const seenFacts = new Set();
+let factsLoaded = false;
+const factKey = (f) => String(f).toLowerCase().replace(/[^a-z0-9가-힣]+/g, ' ').trim();
 export async function addNotes(facts, topic) {
-  const rows = (facts || [])
-    .filter((f) => typeof f === 'string' && f.trim())
-    .slice(0, 5)
-    .map((f) => ({ fact: f.trim().slice(0, 300), topic }));
+  if (!factsLoaded) { factsLoaded = true; (await recentNotes(200)).forEach((f) => seenFacts.add(factKey(f))); }
+  const rows = [];
+  for (const f of facts || []) {
+    if (typeof f !== 'string' || !f.trim()) continue;
+    const k = factKey(f);
+    if (!k || seenFacts.has(k)) continue;
+    seenFacts.add(k);
+    rows.push({ fact: f.trim().slice(0, 300), topic });
+    if (rows.length >= 5) break;
+  }
   if (!rows.length) return;
   await sb.from('story_notes').insert(rows);
 }

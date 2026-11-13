@@ -1,6 +1,6 @@
 // 첫 로그인 실력 알아보기 (듣기 5 · 따라 말하기 3 · 낱말 조합 2)
-import { state, register, go, mount, on, $, esc, topBar, shuffle, tileBuilder, toTiles, ICON } from './ui.js';
-import { speak, listen, canListen, bestSimilarity, sameSentence, LISTEN_ERRORS } from './speech.js';
+import { state, register, go, mount, on, $, esc, topBar, shuffle, tileBuilder, toTiles, ICON, hear } from './ui.js';
+import { speak, canListen, bestSimilarity, sameSentence } from './speech.js';
 import { PLACEMENT, levelFromScore, LEVEL_NAMES } from './content.js';
 import * as api from './api.js';
 
@@ -78,18 +78,12 @@ register('placement', () => {
     on('play', () => speak(q.en, { rate: 0.8, button: $('play') }));
     on('pass', () => { score.speak.push(0); advance(); });
     on('mic', async () => {
-      $('mic').classList.add('recording');
-      $('hint').textContent = '듣고 있어요… 말씀하세요';
-      try {
-        const alts = await listen();
-        const s = bestSimilarity(q.en, alts);
-        score.speak.push(s);
-        $('hint').textContent = s >= 0.6 ? '좋아요!' : '잘 들었어요.';
-        setTimeout(advance, 700);
-      } catch (err) {
-        $('mic').classList.remove('recording');
-        $('hint').textContent = LISTEN_ERRORS[err] || '다시 눌러 주세요.';
-      }
+      const alts = await hear($('mic'), $('hint'));
+      if (!alts || !$('hint')) return;
+      const sc = bestSimilarity(q.en, alts);
+      score.speak.push(sc);
+      $('hint').textContent = sc >= 0.6 ? '좋아요!' : '잘 들었어요.';
+      setTimeout(() => { if ($('mic')) advance(); }, 700);
     });
   }
 

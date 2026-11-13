@@ -27,7 +27,8 @@ create policy "entries own" on public.story_entries for all to authenticated
 -- 3. 관리자 -----------------------------------------------------------------------
 create table if not exists public.admins (email text primary key);
 alter table public.admins enable row level security;  -- 정책이 없으니 앱에서는 읽을 수 없음
-insert into public.admins (email) values ('관리자@이메일') on conflict do nothing;
+-- 관리자 이메일은 여기에 적지 말고, SQL Editor 에서 직접 한 번만 실행하세요:
+--   insert into public.admins (email) values ('관리자@이메일') on conflict do nothing;
 
 create or replace function public.is_admin()
 returns boolean language sql stable security definer set search_path = public as $$

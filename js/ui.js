@@ -1,5 +1,5 @@
 // 화면 도우미: 화면 전환, 글자 보호, 아바타, 낱말 카드 조립
-import { stopSpeaking, stopListening } from './speech.js';
+import { stopSpeaking, stopListening, cancelListening, listen, LISTEN_ERRORS } from './speech.js';
 
 export const state = { user: null, profile: null, installPrompt: null };
 
@@ -7,7 +7,7 @@ const screens = {};
 export function register(name, fn) { screens[name] = fn; }
 export function go(name, arg) {
   stopSpeaking();
-  stopListening();
+  cancelListening();
   if (state.timer) { clearInterval(state.timer); state.timer = null; }
   window.scrollTo(0, 0);
   state.screen = name;
@@ -157,4 +157,76 @@ export function spotlight(...els) {
     for (let p = el.parentElement; p && p !== screen; p = p.parentElement) p.classList.add('has-spot');
   });
   try { spots[spots.length - 1].scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { /* 무시 */ }
+}
+
+// 마이크 버튼 -------------------------------------------------------------------------
+// 누르면 '정지'로 바뀌고, 말이 끝나면 '알아듣는 중'을 거쳐 원래대로 돌아옵니다.
+function micLabel(btn, icon, text) {
+  btn.innerHTML = btn.classList.contains('mic-round') ? `${icon}<span>${text}</span>` : `${icon} ${text}`;
+}
+function micOn(btn) {
+  if (btn.dataset.label == null) btn.dataset.label = btn.innerHTML;
+  micLabel(btn, ICON.stop, '정지');
+  btn.classList.add('recording');
+}
+function micOff(btn) {
+  if (btn.dataset.label != null) { btn.innerHTML = btn.dataset.label; delete btn.dataset.label; }
+  btn.classList.remove('recording', 'thinking');
+  btn.style.removeProperty('--lvl');
+}
+// 마이크로 한 번 듣기. 알아들은 문장 후보를 돌려주고, 못 들었으면 null (이유는 hintEl 에 적음).
+// 듣는 중에 같은 버튼을 다시 누르면 거기까지 들은 말로 진행합니다.
+export async function hear(mic, hintEl, { listening = '듣고 있어요… 말씀하세요', ...opts } = {}) {
+  if (!mic) return null;
+  if (mic.classList.contains('recording')) { stopListening(); return null; }
+  if (mic.classList.contains('thinking')) return null;
+  const say = (t) => { if (hintEl && hintEl.isConnected) hintEl.textContent = t; };
+  micOn(mic);
+  say(listening);
+  try {
+    return await listen({
+      ...opts,
+      onLevel: (v) => mic.style.setProperty('--lvl', v.toFixed(2)),
+      onState: (s) => {
+        if (s !== 'thinking') return;
+        mic.classList.remove('recording');
+        mic.classList.add('thinking');
+        micLabel(mic, ICON.mic, '알아듣는 중…');
+        say('알아듣고 있어요…');
+      },
+    });
+  } catch (err) {
+    if (err !== 'aborted') say(LISTEN_ERRORS[err] || '다시 눌러 주세요.');
+    return null;
+  } finally {
+    micOff(mic);
+  }
+}
+
+// 작은 팡파레: el 둘레로 색종이가 터집니다.
+export function celebrate(el) {
+  if (!el || !el.isConnected) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = el.getBoundingClientRect();
+  const box = document.createElement('div');
+  box.className = 'confetti';
+  box.setAttribute('aria-hidden', 'true');
+  box.style.left = `${r.left + r.width / 2}px`;
+  box.style.top = `${r.top + r.height / 2}px`;
+  const colors = ['#FFC935', '#0B4F9E', '#1B7A45', '#E4572E', '#8E5BD9', '#19A7CE'];
+  const N = 20;
+  for (let i = 0; i < N; i++) {
+    const p = document.createElement('i');
+    const angle = (Math.PI * 2 * i) / N + Math.random() * 0.5;
+    const dist = 70 + Math.random() * 80;
+    p.style.setProperty('--dx', `${Math.round(Math.cos(angle) * dist)}px`);
+    p.style.setProperty('--dy', `${Math.round(Math.sin(angle) * dist * 0.8 - 40)}px`);
+    p.style.setProperty('--rot', `${Math.round(Math.random() * 720 - 360)}deg`);
+    p.style.background = colors[i % colors.length];
+    if (i % 3 === 0) p.style.borderRadius = '50%';
+    p.style.animationDelay = `${Math.round(Math.random() * 90)}ms`;
+    box.appendChild(p);
+  }
+  document.body.appendChild(box);
+  setTimeout(() => box.remove(), 1600);
 }

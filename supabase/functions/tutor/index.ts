@@ -258,7 +258,8 @@ Return JSON with exactly this shape:
   "questions": [                                                         // 5 questions Klaudia asks him, from easy to slightly deeper
     {"en": "...", "ko": "...", "choices": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]}
   ],
-  "talk": {"scene_ko": "one Korean sentence describing the 3-minute chat scene", "opener_en": "Klaudia's first line", "opener_ko": "Korean meaning"}
+  "talk": {"scene_ko": "one Korean sentence describing the 3-minute chat scene", "opener_en": "Klaudia's first line", "opener_ko": "Korean meaning",
+           "suggestions": [ {"en": "...", "ko": "..."} ]}                // 3 different short answers he could say to opener_en, at his level
 }
 Rules:
 - ${SAY_RULE}
@@ -383,21 +384,78 @@ Return JSON:
 
 
 // ---------------------------------------------------------------------------
-// 자연스러운 목소리 (Gemini TTS). 실패하면 앱이 기기 목소리로 대신 읽습니다.
+// 자연스러운 목소리: OpenAI 먼저, 안 되면 Gemini. 둘 다 안 되면 앱이 기기 목소리로 읽습니다.
+const OPENAI_TTS = ["gpt-4o-mini-tts", "tts-1"];
 const TTS_MODELS = ["gemini-3.8-flash-tts", "gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts", "gemini-3.8-flash-lite-tts"];
 const PACE: Record<number, string> = {
-  1: "very slowly and very clearly, with small pauses between words",
-  2: "slowly and clearly",
-  3: "slowly and clearly",
-  4: "at a relaxed, natural pace",
-  5: "at a relaxed, natural pace",
+  1: "Speak very slowly and very clearly, with small pauses between words, like a patient, kind teacher talking to an older beginner.",
+  2: "Speak slowly and clearly, like a patient, kind teacher.",
+  3: "Speak slowly and clearly, warm and friendly.",
+  4: "Speak at a relaxed, natural pace, warm and friendly.",
+  5: "Speak at a relaxed, natural pace, warm and friendly.",
 };
 
+function toBase64(bytes: Uint8Array): string {
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function fromBase64(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function timed(url: string, init: RequestInit, ms: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } catch (e) {
+    throw new GeminiError(504, `${(e as Error).name === "AbortError" ? "timed out" : String(e)}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function openaiSpeech(text: string, level: number): Promise<{ audio: string; mime: string; model: string } | null> {
+  const key = Deno.env.get("OPENAI_API_KEY");
+  if (!key) return null;
+  const voice = Deno.env.get("OPENAI_TTS_VOICE") || "coral";
+  for (const model of (Deno.env.get("OPENAI_TTS_MODELS") || OPENAI_TTS.join(",")).split(",").map((m) => m.trim()).filter(Boolean)) {
+    const body: Record<string, unknown> = { model, voice, input: text, response_format: "mp3" };
+    if (!model.startsWith("tts-")) body.instructions = PACE[level] || PACE[2];
+    try {
+      const t0 = Date.now();
+      const res = await timed("https://api.openai.com/v1/audio/speech", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        body: JSON.stringify(body),
+      }, 15000);
+      console.log("tts", model, res.status, Date.now() - t0, "ms");
+      if (res.ok) {
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        if (bytes.length > 200) return { audio: toBase64(bytes), mime: "audio/mpeg", model };
+      } else {
+        console.error("tts error", model, res.status, (await res.text()).slice(0, 200));
+      }
+    } catch (e) {
+      console.error("tts fail", model, String(e).slice(0, 120));
+    }
+  }
+  return null;
+}
+
 async function speech(b: any) {
-  const key = Deno.env.get("GEMINI_API_KEY");
-  if (!key) throw new GeminiError(500, "GEMINI_API_KEY is not set");
   const text = clip(b.text, 500).trim();
   if (!text) throw new GeminiError(400, "empty text");
+  const level = levelOf(b.level);
+  const oa = await openaiSpeech(text, level);
+  if (oa) return oa;
+
+  const key = Deno.env.get("GEMINI_API_KEY");
+  if (!key) throw new GeminiError(502, "TTS failed");
   const voice = Deno.env.get("TTS_VOICE") || "Sulafat";
   let lastErr: GeminiError | null = null;
   for (const model of TTS_MODELS) {
@@ -430,6 +488,67 @@ async function speech(b: any) {
     lastErr = new GeminiError(res.status, t.slice(0, 300));
   }
   throw lastErr || new GeminiError(502, "TTS failed");
+}
+
+// ---------------------------------------------------------------------------
+// 말 받아 적기: 앱이 녹음한 짧은 소리(WAV)를 영어 글자로. OpenAI 먼저, 안 되면 Gemini.
+const OPENAI_STT = ["gpt-transcribe", "gpt-4o-mini-transcribe", "whisper-1"];
+const MAX_AUDIO_B64 = 2_000_000; // 약 1.5MB (16kHz 로 40초쯤)
+
+async function transcribe(b: any) {
+  const b64 = String(b.audio || "");
+  if (!b64 || b64.length > MAX_AUDIO_B64) throw new GeminiError(400, "bad audio");
+  let bytes: Uint8Array;
+  try { bytes = fromBase64(b64); } catch { throw new GeminiError(400, "bad audio"); }
+  const mime = /^audio\/[a-z0-9.+-]+$/i.test(String(b.mime || "")) ? String(b.mime) : "audio/wav";
+  const ext = /wav/.test(mime) ? "wav" : /mp4|m4a|aac/.test(mime) ? "m4a" : /webm/.test(mime) ? "webm" : "wav";
+
+  const key = Deno.env.get("OPENAI_API_KEY");
+  if (key) {
+    for (const model of (Deno.env.get("OPENAI_STT_MODELS") || OPENAI_STT.join(",")).split(",").map((m) => m.trim()).filter(Boolean)) {
+      const form = new FormData();
+      form.append("file", new Blob([bytes], { type: mime }), `speech.${ext}`);
+      form.append("model", model);
+      form.append("language", "en");
+      form.append("response_format", "json");
+      try {
+        const t0 = Date.now();
+        const res = await timed("https://api.openai.com/v1/audio/transcriptions", {
+          method: "POST", headers: { Authorization: `Bearer ${key}` }, body: form,
+        }, 20000);
+        console.log("stt", model, res.status, Date.now() - t0, "ms");
+        if (res.ok) {
+          const data = await res.json();
+          return { text: clip(data?.text, 500).trim(), model };
+        }
+        console.error("stt error", model, res.status, (await res.text()).slice(0, 200));
+      } catch (e) {
+        console.error("stt fail", model, String(e).slice(0, 120));
+      }
+    }
+  }
+
+  const gkey = Deno.env.get("GEMINI_API_KEY");
+  if (!gkey) throw new GeminiError(502, "STT failed");
+  for (const model of FALLBACK_MODELS.slice(0, 2)) {
+    try {
+      const res = await callGemini(model, gkey, {
+        contents: [{ role: "user", parts: [
+          { inlineData: { mimeType: mime, data: b64 } },
+          { text: "Write down exactly the English words spoken in this audio. Reply with the words only. If nothing is said, reply with nothing." },
+        ] }],
+        generationConfig: { temperature: 0, maxOutputTokens: 200 },
+      }, 20000);
+      console.log("stt", model, res.status);
+      if (!res.ok) { console.error("stt error", model, res.status, (await res.text()).slice(0, 200)); continue; }
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("") ?? "";
+      return { text: clip(text, 500).trim(), model };
+    } catch (e) {
+      console.error("stt fail", model, String(e).slice(0, 120));
+    }
+  }
+  throw new GeminiError(502, "STT failed");
 }
 
 // 프로젝트 키 찾기 (예전 anon 키 / 새 publishable 키 모두 지원)
@@ -477,13 +596,14 @@ Deno.serve(async (req) => {
       case "letter": return json(await readLetter(b));
       case "polish": return json(await polishReply(b));
       case "tts":    return json(await speech(b));
-      case "ping":   return json({ ok: true, order: modelOrder() });
+      case "stt":    return json(await transcribe(b));
+      case "ping":   return json({ ok: true });
       default:       return json({ error: "unknown action" }, 400);
     }
   } catch (e) {
     if (e instanceof GeminiError) {
       console.error("gemini", e.status, e.message);
-      return json({ error: e.status === 429 ? "busy" : "ai_error", detail: e.message.slice(0, 200) }, e.status === 429 ? 429 : 502);
+      return json({ error: e.status === 429 ? "busy" : "ai_error" }, e.status === 429 ? 429 : 502);
     }
     console.error(e);
     return json({ error: "server_error" }, 500);
