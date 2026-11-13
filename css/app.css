@@ -409,3 +409,17 @@ input.code { font-family: var(--font-en); font-size: 34px; letter-spacing: 8px; 
 .mic.thinking, .mic-round.thinking { background: var(--tint); border-color: var(--primary); color: var(--primary); animation: none; opacity: .9; }
 .mic-round.thinking span { font-size: 14px; }
 .mic.spot.recording, .mic-round.spot.recording { animation: none; }
+
+/* 대답 예시: 한 장씩, 양옆 화살표로 넘기기 */
+.sugg-list { gap: 6px; }
+.sugg-row { display: flex; align-items: stretch; gap: 6px; }
+.sugg-arrow { flex: none; width: 48px; border-radius: 14px; border: 2px solid var(--line); background: var(--card); font-size: 38px; line-height: 1; font-weight: 700; color: var(--primary); }
+.sugg-arrow:disabled { opacity: .25; }
+.sugg-row .sugg-card { flex: 1; min-width: 0; display: flex; flex-direction: column; touch-action: pan-y; }
+.sugg-row .sugg-main { flex: 1; padding: 12px 14px; min-height: 92px; }
+.sugg-listen { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 15px; font-weight: 700; color: var(--ink-soft); }
+.sugg-listen svg { width: 18px; height: 18px; }
+.sugg-row .sugg-send { min-height: 54px; font-size: 20px; }
+.sugg-dots { justify-content: center; align-items: center; margin-top: 2px; }
+.sugg-dots small { margin-left: 8px; font-size: 15px; color: var(--ink-soft); font-family: var(--font-en); }
+.say-bubble, #bubble { cursor: pointer; }

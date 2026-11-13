@@ -448,7 +448,7 @@ function qaStep(S) {
     if (!$('area') || $('feedback')) return;
     if (canListen) {
       $('hint').textContent = '이제 말씀하실 차례예요. 마이크를 누르고 영어로 대답해 주세요.';
-      spotlight($('mic'), $('hint'));
+      spotlight($('mic'), $('hint'), $('again'), document.querySelector('#area .or'), document.querySelector('#area .choices'));
     } else {
       $('hint').textContent = '아래에서 대답을 고르거나 영어로 적어 주세요.';
       spotlight($('area'));
@@ -480,6 +480,8 @@ function qaStep(S) {
     bindQuit();
     const play = async () => { clearSpotlight(); if (await emma(q.en, S)) yourTurn(); };
     on('again', play);
+    // 클라우디아 말풍선을 누르면 흐린 화면이 풀려요
+    on('bubble', () => { if (!$('feedback')) clearSpotlight(); });
     setTimeout(() => { if ($('again')) play(); }, 350);
     if (qs[k + 1]) prefetch(qs[k + 1].en);
     else if (S.c.talk && S.c.talk.opener_en) prefetch(S.c.talk.opener_en);
@@ -581,7 +583,7 @@ function talkStep(S) {
     </div>
 
     <div id="lower">
-      <p class="sugg-title">이렇게 말해 볼까요? <span class="muted">(누르면 들려요)</span></p>
+      <p class="sugg-title">이렇게 말해 볼까요? <span class="muted">(옆으로 넘겨 보세요)</span></p>
       <div class="sugg-list" id="sugg"></div>
     </div>
 
@@ -622,26 +624,48 @@ function talkStep(S) {
   function showLatest() { slide = lines().length - 1; renderBubble(); }
 
   // 대답 예시 카드
+  // 한 장씩 보여 주고, 양옆 화살표(또는 손가락으로 밀기)로 넘겨요.
+  let si = 0;
   function renderSugg() {
     const box = $('sugg');
     if (!box) return;
-    box.innerHTML = sugg.slice(0, 3).map((x, i) => `<div class="sugg-card ${i === picked ? 'picked' : ''}">
-        <button class="sugg-main" type="button" data-i="${i}">
-          <span class="en" lang="en">${esc(x.en)}</span>
-          ${x.ko ? `<small>${esc(x.ko)}</small>` : ''}
-        </button>
-        ${i === picked ? `<button class="sugg-send" type="button" data-send="${i}">이 문장으로 대답하기</button>` : ''}
-      </div>`).join('');
-    box.querySelectorAll('.sugg-main').forEach((b) => b.addEventListener('click', () => {
-      picked = Number(b.dataset.i);
-      renderSugg();
-      emma(sugg[picked].en, S);
-    }));
-    box.querySelectorAll('.sugg-send').forEach((b) => b.addEventListener('click', () => send(sugg[Number(b.dataset.send)].en)));
+    const list = sugg.slice(0, 3);
+    si = Math.max(0, Math.min(si, list.length - 1));
+    const x = list[si];
+    if (!x) { box.innerHTML = ''; return; }
+    box.innerHTML = `<div class="sugg-row">
+        <button class="sugg-arrow" id="suggPrev" type="button" aria-label="이전 예시" ${si === 0 ? 'disabled' : ''}>‹</button>
+        <div class="sugg-card ${si === picked ? 'picked' : ''}" id="suggCard">
+          <button class="sugg-main" type="button">
+            <span class="en" lang="en">${esc(x.en)}</span>
+            ${x.ko ? `<small>${esc(x.ko)}</small>` : ''}
+            <span class="sugg-listen">${ICON.sound} 들어 보기</span>
+          </button>
+          <button class="sugg-send" type="button">이 문장으로 대답하기</button>
+        </div>
+        <button class="sugg-arrow" id="suggNext" type="button" aria-label="다음 예시" ${si >= list.length - 1 ? 'disabled' : ''}>›</button>
+      </div>
+      ${list.length > 1 ? `<div class="slide-dots sugg-dots">${list.map((_, i) => `<span class="${i === si ? 'on' : ''}"></span>`).join('')}<small>${si + 1} / ${list.length}</small></div>` : ''}`;
+    box.querySelector('.sugg-main').addEventListener('click', () => { picked = si; renderSugg(); emma(x.en, S); });
+    box.querySelector('.sugg-send').addEventListener('click', () => send(x.en));
+    on('suggPrev', () => { if (si > 0) { si--; renderSugg(); } });
+    on('suggNext', () => { if (si < list.length - 1) { si++; renderSugg(); } });
+    // 손가락으로 좌우로 밀어서 넘기기
+    const card = $('suggCard');
+    let sx = null;
+    card.addEventListener('touchstart', (e) => { sx = e.touches[0].clientX; }, { passive: true });
+    card.addEventListener('touchend', (e) => {
+      if (sx == null) return;
+      const dx = e.changedTouches[0].clientX - sx;
+      sx = null;
+      if (Math.abs(dx) < 40) return;
+      const n = si + (dx < 0 ? 1 : -1);
+      if (n >= 0 && n < list.length) { si = n; renderSugg(); }
+    });
   }
   function setSugg(list) {
     const clean = (Array.isArray(list) ? list : []).filter((x) => x && x.en).slice(0, 3);
-    if (clean.length) { sugg = clean; picked = -1; renderSugg(); }
+    if (clean.length) { sugg = clean; picked = -1; si = 0; renderSugg(); }
   }
 
   // 내 차례: 마이크만 밝게
@@ -650,10 +674,10 @@ function talkStep(S) {
     if (timeUp) return end();
     if (canListen && $('mic')) {
       setHint('이제 말씀하실 차례예요');
-      spotlight($('mic'), $('hint'), $('lower'));
+      spotlight($('mic'), $('hint'), $('lower'), $('again'));
     } else {
       setHint('영어로 적어서 보내 주세요.');
-      spotlight($('typed'), $('hint'), $('lower'));
+      spotlight($('typed'), $('hint'), $('lower'), $('again'));
     }
   }
   async function klaudiaSays(line) {
@@ -697,7 +721,7 @@ function talkStep(S) {
 
   function restoreLower() {
     if (!$('lower')) return;
-    $('lower').innerHTML = `<p class="sugg-title">이렇게 말해 볼까요? <span class="muted">(누르면 들려요)</span></p><div class="sugg-list" id="sugg"></div>`;
+    $('lower').innerHTML = `<p class="sugg-title">이렇게 말해 볼까요? <span class="muted">(옆으로 넘겨 보세요)</span></p><div class="sugg-list" id="sugg"></div>`;
     renderSugg();
   }
 
@@ -723,7 +747,7 @@ function talkStep(S) {
     on('nextTurn', () => {
       waitingNext = false;
       dock(true);
-      if (nextSugg.length) { sugg = nextSugg.slice(0, 3); picked = -1; }
+      if (nextSugg.length) { sugg = nextSugg.slice(0, 3); picked = -1; si = 0; }
       restoreLower();
       if (reply) reply.hidden = false;
       if (timeUp) return end();
@@ -769,6 +793,8 @@ function talkStep(S) {
   on('nextSlide', () => { slide++; renderBubble(); });
   // 말풍선을 손가락으로 밀어서 넘기기
   let x0 = null;
+  // 클라우디아 말풍선을 누르면 흐린 화면이 풀려요 (대답 확인 중일 때는 그대로)
+  $('sayBubble').addEventListener('click', () => { if (!waitingNext && !ended) clearSpotlight(); });
   $('sayBubble').addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
   $('sayBubble').addEventListener('touchend', (e) => {
     if (x0 == null) return;
