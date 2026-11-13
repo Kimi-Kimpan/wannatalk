@@ -82,28 +82,22 @@ register('login', () => {
       <h1>메일함을 열어 주세요</h1>
       <p class="sub">${esc(email)} <span lang="en">· Check your email</span></p>
 
-      <form id="codeForm" class="form panel" novalidate>
-        <label for="code">메일에 적힌 번호 <span lang="en" class="muted">· Code</span></label>
-        <input id="code" class="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456">
-        <button class="big primary" type="submit" id="codeBtn">번호로 로그인 <small lang="en">Sign in with code</small></button>
+      <div class="panel">
+        <p class="lead"><b>1.</b> 메일 속 <b lang="en">Sign in</b>을 누르면 바로 ${admin ? '관리자 화면이 열려요' : '로그인돼요'}.</p>
+        <p class="muted" lang="en">Tap “Sign in” in the email we just sent.</p>
+      </div>
+
+      <form id="linkForm" class="form panel" novalidate>
+        <p class="lead"><b>2.</b> 다른 창에서 열렸다면</p>
+        <p class="muted">메일 속 <b lang="en">Sign in</b>을 <b>길게 눌러 "링크 복사"</b>를 고른 뒤, 아래 버튼을 누르세요.</p>
+        <button class="big primary" id="paste" type="button">복사한 링크로 로그인 <small lang="en">Paste link &amp; sign in</small></button>
+        <label for="link" class="muted small-label">붙여넣기가 안 되면 여기에 길게 눌러 붙여넣기</label>
+        <input id="link" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…">
+        <button class="plain mid" id="linkBtn" type="submit">이 링크로 로그인</button>
       </form>
 
       <p class="msg" id="msg" role="alert">${esc(msg)}</p>
-
-      <details class="panel alt-login">
-        <summary>메일에 번호가 없거나, 링크로 로그인하려면</summary>
-        <p>메일 속 <b lang="en">Sign in</b>을 누르면 바로 ${admin ? '관리자 화면이 열려요' : '로그인돼요'}.</p>
-        <p class="muted">홈 화면 앱(특히 아이폰)이라 링크가 다른 창에서 열린다면, <b lang="en">Sign in</b>을 <b>길게 눌러 링크를 복사</b>한 뒤 여기에 붙여넣으세요.</p>
-        <form id="linkForm" class="form" novalidate>
-          <label for="link">로그인 링크 붙여넣기</label>
-          <input id="link" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…">
-          <div class="row">
-            <button class="plain mid" id="paste" type="button">붙여넣기</button>
-            <button class="primary mid" id="linkBtn" type="submit">링크로 로그인</button>
-          </div>
-        </form>
-        <button class="plain mid" id="ok" type="button">브라우저에서 이미 로그인했어요</button>
-      </details>
+      <button class="plain mid wide" id="ok" type="button">로그인했어요 · 화면 새로 보기</button>
 
       <div class="row">
         <button class="plain mid" id="again" type="button">메일 다시 받기</button>
@@ -119,44 +113,35 @@ register('login', () => {
     };
     const say = (t) => { if ($('msg')) $('msg').textContent = t; };
 
-    $('codeForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const code = $('code').value.replace(/\D/g, '');
-      if (code.length < 6) { say('메일에 적힌 번호를 끝까지 적어 주세요.'); return; }
-      $('codeBtn').disabled = true;
-      say('확인하는 중이에요…');
-      try { done(await api.verifyCode(email, code)); }
-      catch (err) {
-        $('codeBtn').disabled = false;
-        say(/expired/i.test(err.message || '') ? '번호가 만료됐어요. 메일을 다시 받아 주세요.' : '번호가 맞지 않아요. 메일의 번호를 다시 확인해 주세요.');
-      }
-    });
-
     $('linkForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const link = $('link').value.trim();
       if (!link) { say('메일 속 Sign in 링크를 붙여넣어 주세요.'); return; }
       $('linkBtn').disabled = true;
       say('확인하는 중이에요…');
+      await loginWith(link);
+      if ($('linkBtn')) $('linkBtn').disabled = false;
+    });
+    async function loginWith(link) {
+      say('확인하는 중이에요…');
       try { done(await api.signInWithLink(link)); }
       catch (err) {
-        $('linkBtn').disabled = false;
         say(err.message === 'no_token'
           ? '로그인 링크가 아닌 것 같아요. 메일 속 Sign in 을 길게 눌러 "링크 복사"를 골라 주세요.'
           : '이 링크는 이미 쓰였거나 만료됐어요. 메일을 다시 받아 새 링크로 해 주세요.');
       }
-    });
+    }
     on('paste', async () => {
-      try {
-        const t = await navigator.clipboard.readText();
-        if (t) $('link').value = t.trim();
-        else say('복사된 내용이 없어요.');
-      } catch (err) { say('칸을 길게 눌러 "붙여넣기"를 골라 주세요.'); $('link').focus(); }
+      let t = '';
+      try { t = (await navigator.clipboard.readText() || '').trim(); } catch (err) { /* 권한 없음 */ }
+      if (!t) { say('복사한 링크를 가져오지 못했어요. 아래 칸을 길게 눌러 붙여넣어 주세요.'); $('link').focus(); return; }
+      $('link').value = t;
+      loginWith(t);
     });
 
     on('ok', async () => {
       const u = await api.currentUser();
-      if (!u) { say('이 화면에서는 아직 로그인되지 않았어요. 번호나 링크 붙여넣기로 로그인해 주세요.'); return; }
+      if (!u) { say('이 화면에서는 아직 로그인되지 않았어요. 2번 방법(링크 복사)으로 해 주세요.'); return; }
       done({ user: u });
     });
     on('again', async () => {
@@ -164,7 +149,6 @@ register('login', () => {
       catch (err) { stepCode('잠시 뒤에 다시 눌러 주세요.'); }
     });
     on('change', () => stepEmail());
-    try { $('code').focus(); } catch (e) { /* 무시 */ }
   }
 
   landing();

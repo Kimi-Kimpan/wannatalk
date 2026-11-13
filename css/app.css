@@ -252,7 +252,9 @@ input.code { font-family: var(--font-en); font-size: 34px; letter-spacing: 8px; 
 .alt-login #ok { width: 100%; flex: none; }
 .hero .lead { text-wrap: balance; }
 .msg:empty { min-height: 0; }
-.alt-login input[type="url"] { width: 100%; min-height: 56px; padding: 10px 14px; border-radius: 14px; border: 2px solid var(--line); background: var(--card); font-size: 18px; }
+.small-label { font-size: 16px; font-weight: 500; margin-top: 4px; }
+.wide { width: 100%; flex: none; }
+#linkForm input[type="url"], .alt-login input[type="url"] { width: 100%; min-height: 56px; padding: 10px 14px; border-radius: 14px; border: 2px solid var(--line); background: var(--card); font-size: 18px; }
 
 /* 홈 대시보드 */
 .dash-card { background: var(--card); border: 2px solid var(--line); border-radius: 22px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
