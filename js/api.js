@@ -40,17 +40,18 @@ export async function ai(action, payload = {}) {
 
 export function aiMessage(e) {
   const code = e && e.code;
-  if (code === 'busy') return '클라우디아 선생님이 잠깐 쉬는 중이에요. 1분 뒤에 다시 눌러 주세요.';
+  if (code === 'busy') return '클라우디아가 잠깐 쉬는 중이에요. 1분 뒤에 다시 눌러 주세요.';
   if (code === 'network') return '인터넷 연결을 확인하고 다시 눌러 주세요.';
   if (code === 'auth') return '다시 로그인해 주세요.';
-  if (code === 'timeout') return '클라우디아 선생님 대답이 너무 늦어요. 잠시 뒤 다시 눌러 주세요.';
-  return '클라우디아 선생님과 연결이 잘 안 돼요. 잠시 뒤 다시 눌러 주세요.';
+  if (code === 'timeout') return '클라우디아 대답이 너무 늦어요. 잠시 뒤 다시 눌러 주세요.';
+  return '클라우디아와 연결이 잘 안 돼요. 잠시 뒤 다시 눌러 주세요.';
 }
 
 // 로그인 -------------------------------------------------------------------------
-export async function sendCode(email) {
-  const back = location.origin + location.pathname;
-  const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: back } });
+export async function sendCode(email, { admin = false } = {}) {
+  const base = location.origin + location.pathname.replace(/[^/]*$/, '');
+  const back = admin ? base + 'admin.html' : base;
+  const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: !admin, emailRedirectTo: back } });
   if (error) throw error;
 }
 export async function verifyCode(email, token) {

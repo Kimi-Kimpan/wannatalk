@@ -72,7 +72,7 @@ export function topBar(label, ratio, quitText = '처음으로') {
   <div class="progress" aria-hidden="true"><span style="width:${Math.round(Math.max(0, Math.min(1, ratio)) * 100)}%"></span></div>`;
 }
 
-// 클라우디아 선생님 그림 (직접 그린 단순한 캐릭터)
+// 클라우디아 그림 (직접 그린 단순한 캐릭터)
 export function avatar(size = 'md') {
   return `<div class="avatar ${size}" aria-hidden="true">
   <svg viewBox="0 0 120 120">
@@ -135,4 +135,25 @@ export function tileBuilder(container, words, onChange) {
 // 문장을 낱말 카드로 쪼개기
 export function toTiles(sentence) {
   return String(sentence || '').split(/\s+/).filter(Boolean);
+}
+
+// 지금 할 일만 밝게: 나머지 화면은 흐리게 --------------------------------------------
+function currentScreen() { return document.querySelector('#app > .screen'); }
+export function clearSpotlight() {
+  const screen = currentScreen();
+  if (!screen) return;
+  screen.classList.remove('focus');
+  screen.querySelectorAll('.spot, .has-spot').forEach((el) => el.classList.remove('spot', 'has-spot'));
+}
+export function spotlight(...els) {
+  const screen = currentScreen();
+  clearSpotlight();
+  const spots = els.filter((el) => el && screen && screen.contains(el));
+  if (!spots.length) return;
+  screen.classList.add('focus');
+  spots.forEach((el) => {
+    el.classList.add('spot');
+    for (let p = el.parentElement; p && p !== screen; p = p.parentElement) p.classList.add('has-spot');
+  });
+  try { spots[spots.length - 1].scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { /* 무시 */ }
 }

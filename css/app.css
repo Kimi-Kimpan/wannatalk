@@ -234,6 +234,63 @@ input.code { font-family: var(--font-en); font-size: 34px; letter-spacing: 8px; 
 /* 휴대폰에서 말하기가 되면 글자 입력칸은 숨김 */
 @media (pointer: coarse) { .typed.optional { display: none; } }
 
+
+/* 첫 화면 */
+.landing { gap: 18px; }
+.hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; padding-top: 8px; }
+.hero h1 { font-size: 30px; }
+.avatar.lg { width: 132px; height: 132px; }
+.feature-list { list-style: none; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.feature-list li { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 12px 14px; font-weight: 700; font-size: 21px; display: flex; align-items: center; gap: 10px; }
+.link-btn { align-self: center; min-height: 52px; padding: 6px 12px; font-size: 19px; font-weight: 700; color: var(--ink-soft); text-decoration: underline; text-underline-offset: 4px; }
+.mode-pill { font-size: 17px; font-weight: 700; padding: 6px 14px; border-radius: 99px; background: var(--tint); color: var(--primary); }
+.mode-pill.admin { background: var(--ink); color: var(--paper); }
+
+/* 홈 대시보드 */
+.dash-card { background: var(--card); border: 2px solid var(--line); border-radius: 22px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+.dash-card .label { font-size: 18px; font-weight: 700; color: var(--ink-soft); display: flex; align-items: center; gap: 8px; }
+.progress-card { flex-direction: row; align-items: center; gap: 16px; }
+.gauge { width: 124px; height: 124px; flex: none; }
+.gauge .g-num { font-family: var(--font-en); font-size: 28px; font-weight: 700; fill: var(--ink); }
+.gauge .g-sub { font-family: var(--font-en); font-size: 13px; fill: var(--ink-soft); }
+.progress-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.big-line { font-size: 24px; font-weight: 700; line-height: 1.3; }
+.progress-info .dots { gap: 6px; }
+.progress-info .dot { width: 18px; height: 18px; }
+#msgCard.has-letter { border-color: var(--listen); background: color-mix(in srgb, var(--listen) 12%, var(--card)); }
+.count-pill { background: var(--listen); color: var(--listen-ink); border-radius: 99px; padding: 0 10px; font-size: 16px; }
+.from { font-weight: 700; font-size: 21px; }
+.snippet { font-size: 21px; line-height: 1.4; }
+.steps { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.steps li { background: var(--tint); border-radius: 12px; padding: 6px 12px; font-size: 18px; font-weight: 500; }
+.steps li[hidden] { display: none; }
+@media (max-width: 400px) {
+  .gauge { width: 104px; height: 104px; }
+  .big-line { font-size: 21px; }
+  .hero h1 { font-size: 26px; }
+  .avatar.lg { width: 108px; height: 108px; }
+}
+
+/* 말하기 집중: 지금 할 일만 밝게 */
+.screen.focus > :not(.spot):not(.has-spot),
+.screen.focus .has-spot > :not(.spot):not(.has-spot) { opacity: .28; filter: saturate(.5); transition: opacity .3s, filter .3s; }
+.screen .spot { opacity: 1; filter: none; }
+.mic.spot { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); min-height: 100px; font-size: 29px; animation: invite 1.8s ease-in-out infinite; }
+.mic.spot.recording { background: var(--bad); border-color: var(--bad); animation: pulse 1.2s infinite; }
+@keyframes invite { 0%, 100% { box-shadow: 0 0 0 0 rgba(11,79,158,.45); } 50% { box-shadow: 0 0 0 16px rgba(11,79,158,0); } }
+.hint.spot { color: var(--ink); font-weight: 700; font-size: 22px; }
+.or { text-align: center; font-size: 17px; color: var(--ink-soft); margin-bottom: -6px; }
+.feedback { background: var(--card); border: 3px solid var(--primary); border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.feedback > .label { font-size: 16px; font-weight: 700; color: var(--ink-soft); }
+.feedback > .en { font-size: 25px; font-weight: 700; line-height: 1.3; }
+.feedback > .ko { font-size: 19px; color: var(--ink-soft); }
+.praise { font-size: 22px; font-weight: 700; color: var(--good); }
+#nextQ.spot, #nextTurn.spot, #done.spot { min-height: 88px; font-size: 30px; }
+.screen.talk { overflow-y: auto; }
+#fbBox:not(:empty) { display: flex; flex-direction: column; gap: 12px; }
+#fbBox .big { width: 100%; }
+.screen.talk .log { min-height: 120px; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
