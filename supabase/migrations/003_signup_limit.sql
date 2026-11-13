@@ -54,3 +54,12 @@ revoke all on function public.admin_signup_settings()  from public, anon;
 revoke all on function public.admin_set_max_users(int) from public, anon;
 grant execute on function public.admin_signup_settings()  to authenticated;
 grant execute on function public.admin_set_max_users(int) to authenticated;
+
+-- 4. 잠그기: 관리자 전용 표는 앱에서 아예 손댈 수 없게, 로그인 안 한 사람은 도우미 함수도 못 쓰게
+revoke all on public.admins       from anon, authenticated;
+revoke all on public.app_settings from anon, authenticated;
+revoke execute on function public.my_family()       from public, anon;
+revoke execute on function public.is_admin()        from public, anon;
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+grant execute on function public.my_family() to authenticated;
+grant execute on function public.is_admin()  to authenticated;
