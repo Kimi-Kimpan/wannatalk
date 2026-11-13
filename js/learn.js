@@ -12,7 +12,12 @@ register('day', (opts) => startDay(opts || {}));
 // 진행 상황 기억 (중간에 나가도 이어서 하기) --------------------------------------------
 function saveProgress(S) {
   if (S.review) return;
-  try { localStorage.setItem('wt-progress', JSON.stringify({ day: S.day, i: S.i, step: S.steps[S.i], score: S.score })); } catch (e) { /* 무시 */ }
+  try {
+    localStorage.setItem('wt-progress', JSON.stringify({
+      day: S.day, i: S.i, step: S.steps[S.i], sub: S.sub || 0,
+      done: S.steps.slice(0, S.i), score: S.score,
+    }));
+  } catch (e) { /* 무시 */ }
 }
 function readProgress() {
   try { return JSON.parse(localStorage.getItem('wt-progress') || 'null'); } catch (e) { return null; }
@@ -81,7 +86,11 @@ async function startDay({ day, review = false }) {
     const saved = readProgress();
     if (saved && saved.day === day) {
       const idx = steps.indexOf(saved.step);
-      if (idx > 0) { S.i = idx; if (saved.score) S.score = saved.score; }
+      if (idx >= 0 && (idx > 0 || saved.sub > 0)) {
+        S.i = idx;
+        S.resumeSub = saved.sub || 0;
+        if (saved.score) S.score = saved.score;
+      }
     }
   }
   runStep(S);
@@ -89,15 +98,27 @@ async function startDay({ day, review = false }) {
 
 function runStep(S) {
   if (S.i >= S.steps.length) return finishDay(S);
+  S.sub = 0;
+  current = S;
   saveProgress(S);
   const fn = { letter: letterStep, cards: cardsStep, words: wordsStep, qa: qaStep, talk: talkStep }[S.steps[S.i]];
   fn(S);
 }
-function nextStep(S) { S.i++; runStep(S); }
+function nextStep(S) { S.i++; S.resumeSub = 0; runStep(S); }
+let current = null;
+// 단계 안에서 몇 번째까지 했는지 (나갔다 와도 그 자리부터)
+function startAt(S, n) { const k = Math.min(Math.max(0, S.resumeSub || 0), Math.max(0, n - 1)); S.resumeSub = 0; return k; }
+function mark(S, k) { S.sub = k; saveProgress(S); }
 function header(S, part = 0) {
-  return topBar(`${S.i + 1}/${S.steps.length} · ${STEP_NAMES[S.steps[S.i]]}`, (S.i + part) / S.steps.length);
+  return topBar(`${S.i + 1}/${S.steps.length} · ${STEP_NAMES[S.steps[S.i]]}`, (S.i + part) / S.steps.length, '나가기');
 }
-function bindQuit() { on('quit', () => go('home')); }
+// 나가기: 여기까지 저장하고 홈으로
+function bindQuit() {
+  on('quit', () => {
+    if (current) saveProgress(current);
+    go('home');
+  });
+}
 function say(text, S, btnId = 'play', slow = false) {
   return speak(text, { rate: slow ? 0.55 : S.rate, button: $(btnId), natural: true });
 }
@@ -282,9 +303,10 @@ async function letterStep(S) {
 // 2. 문장 카드 ------------------------------------------------------------------------
 function cardsStep(S) {
   const cards = S.c.cards;
-  let k = 0;
+  let k = startAt(S, cards.length);
   function render() {
     const it = cards[k];
+    mark(S, k);
     mount(`<section class="screen">
       ${header(S, k / cards.length)}
       <div class="card">
@@ -323,10 +345,11 @@ function wordsStep(S) {
   const qs = shuffle(words).slice(0, Math.min(5, words.length));
   const nOpt = S.level >= 3 ? 3 : 2;
   const total = words.length + qs.length;
-  let k = 0;
+  let k = startAt(S, words.length);
 
   function learn() {
     const w = words[k];
+    mark(S, k);
     mount(`<section class="screen">
       ${header(S, k / total)}
       <div class="card word">
@@ -395,7 +418,7 @@ const CHEERS = [
 
 function qaStep(S) {
   const qs = S.c.questions;
-  let k = 0;
+  let k = startAt(S, qs.length);
 
   // 클라우디아가 말한 뒤: 마이크만 밝게
   function yourTurn() {
@@ -412,6 +435,7 @@ function qaStep(S) {
   function ask() {
     if (k >= qs.length) return nextStep(S);
     const q = qs[k];
+    mark(S, k);
     mount(`<section class="screen scroll">
       ${header(S, k / qs.length)}
       <div class="emma-row">

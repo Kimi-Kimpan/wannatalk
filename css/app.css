@@ -261,9 +261,16 @@ input.code { font-family: var(--font-en); font-size: 34px; letter-spacing: 8px; 
 .count-pill { background: var(--listen); color: var(--listen-ink); border-radius: 99px; padding: 0 10px; font-size: 16px; }
 .from { font-weight: 700; font-size: 21px; }
 .snippet { font-size: 21px; line-height: 1.4; }
-.steps { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
-.steps li { background: var(--tint); border-radius: 12px; padding: 6px 12px; font-size: 18px; font-weight: 500; }
-.steps li[hidden] { display: none; }
+.checklist { list-style: none; padding: 0; margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.checklist li { display: flex; align-items: center; gap: 12px; font-size: 21px; min-height: 40px; }
+.checklist li[hidden] { display: none; }
+.checklist .box { width: 28px; height: 28px; flex: none; border: 2.5px solid var(--line); border-radius: 8px; display: grid; place-items: center; font-size: 18px; font-weight: 700; color: #fff; }
+.checklist li.done .box { background: var(--good); border-color: var(--good); }
+.checklist li.done { color: var(--ink-soft); }
+.checklist li.now { font-weight: 700; }
+.checklist li.now .box { border-color: var(--primary); }
+.checklist small { font-size: 16px; color: var(--primary); font-weight: 700; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (max-width: 400px) {
   .gauge { width: 104px; height: 104px; }
   .big-line { font-size: 21px; }

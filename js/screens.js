@@ -191,8 +191,21 @@ register('home', async () => {
   const inCycle = ((day - 1) % TOPICS.length) + 1;
   let resume = null;
   try { resume = JSON.parse(localStorage.getItem('wt-progress') || 'null'); } catch (e) { /* 무시 */ }
-  const resuming = resume && resume.day === day && resume.i > 0 && !doneToday;
-  const nextT = topicForDay(day);
+  if (!resume || resume.day !== day || doneToday) resume = null;
+  const doneSteps = new Set(resume && Array.isArray(resume.done) ? resume.done : []);
+  const resuming = !!resume && (doneSteps.size > 0 || resume.sub > 0);
+
+  const STEPS = [['letter', '편지 읽고 답장하기'], ['cards', '문장 카드'], ['words', '낱말 10개'], ['qa', '묻고 답하기'], ['talk', '3분 대화']];
+  const nowStep = resume ? resume.step : null;
+  const checklist = STEPS.map(([id, label]) => {
+    const done = doneToday || doneSteps.has(id);
+    const now = !done && id === nowStep;
+    return `<li data-step="${id}" class="${done ? 'done' : ''} ${now ? 'now' : ''}" ${id === 'letter' && !doneSteps.has('letter') ? 'hidden' : ''}>
+      <span class="box" aria-hidden="true">${done ? '✓' : ''}</span>
+      <span>${label}${now ? ' <small>· 여기서부터</small>' : ''}</span>
+      <span class="sr">${done ? '완료' : '아직'}</span>
+    </li>`;
+  }).join('');
 
   const dots = TOPICS.map((x, i) =>
     `<span class="dot ${i + 1 < inCycle || (i + 1 === inCycle && doneToday) ? 'done' : ''} ${i + 1 === inCycle && !doneToday ? 'now' : ''}" title="${esc(x.ko)}"></span>`).join('');
@@ -204,6 +217,24 @@ register('home', async () => {
     </div>
     <h1>${esc(p.name)}님, 안녕하세요</h1>
 
+    <div class="dash-card lesson-card">
+      <p class="label">${doneToday ? '오늘 레슨을 마쳤어요 👏' : resuming ? '하던 레슨이 있어요' : '오늘의 레슨'}</p>
+      <div class="today-topic"><span class="emoji" aria-hidden="true">${t.emoji}</span>${doneToday ? '다음: ' : ''}${esc(t.ko)}</div>
+      <p class="muted">${day}일째 · ${esc(LEVEL_NAMES[p.level])}</p>
+      <ul class="checklist" id="steps">${checklist}</ul>
+    </div>
+    ${doneToday
+      ? `<div class="stack">
+           <button class="big primary" id="ahead" type="button">다음 레슨 미리 하기</button>
+           <button class="big plain" id="review" type="button">오늘 레슨 다시 하기</button>
+         </div>`
+      : `<button class="big primary huge" id="start" type="button">${resuming ? '레슨 이어하기' : '오늘 레슨 시작'}</button>`}
+
+    <div class="dash-card" id="msgCard">
+      <p class="label">✉️ 오늘 온 편지</p>
+      <p class="muted">확인하는 중…</p>
+    </div>
+
     <div class="dash-card progress-card">
       ${gauge(Math.min(doneDays, TOTAL_DAYS), TOTAL_DAYS)}
       <div class="progress-info">
@@ -213,32 +244,6 @@ register('home', async () => {
         <div class="dots" aria-label="이번 바퀴 ${inCycle - (doneToday ? 0 : 1)}/10 완료">${dots}</div>
       </div>
     </div>
-
-    <div class="dash-card" id="msgCard">
-      <p class="label">✉️ 오늘 온 편지</p>
-      <p class="muted">확인하는 중…</p>
-    </div>
-
-    <div class="dash-card lesson-card">
-      <p class="label">${doneToday ? '✅ 오늘 레슨을 마쳤어요' : '📚 오늘의 레슨'}</p>
-      <div class="today-topic"><span class="emoji" aria-hidden="true">${nextT.emoji}</span>${doneToday ? '다음: ' : ''}${esc(nextT.ko)}</div>
-      <p class="muted">${day}일째 · ${esc(LEVEL_NAMES[p.level])}</p>
-      <ol class="steps" id="steps">
-        <li id="stepLetter" hidden>✉️ 편지 읽고 답장</li>
-        <li>📖 문장 카드</li>
-        <li>🔤 낱말 10개</li>
-        <li>💬 묻고 답하기</li>
-        <li>🗣️ 3분 대화</li>
-      </ol>
-    </div>
-
-    <div class="spacer"></div>
-    ${doneToday
-      ? `<div class="stack">
-           <button class="big primary" id="ahead" type="button">다음 레슨 미리 하기</button>
-           <button class="big plain" id="review" type="button">오늘 레슨 다시 하기</button>
-         </div>`
-      : `<button class="big primary huge" id="start" type="button">${resuming ? '이어서 하기' : '오늘 레슨 시작'}</button>`}
   </section>`);
 
   on('settings', () => go('settings'));
@@ -259,7 +264,8 @@ register('home', async () => {
         <p class="from">${esc(from)}님이 보냈어요</p>
         <p class="snippet" lang="en">“${esc(letter.body.length > 90 ? letter.body.slice(0, 90) + '…' : letter.body)}”</p>
         <p class="muted">레슨 처음에 함께 읽고 답장해요.</p>`;
-      if ($('stepLetter')) $('stepLetter').hidden = false;
+      const li = document.querySelector('#steps li[data-step="letter"]');
+      if (li && !doneToday && !resuming) li.hidden = false;
     } else {
       box.innerHTML = `<p class="label">✉️ 오늘 온 편지</p><p class="muted">아직 온 편지가 없어요.</p>`;
     }
