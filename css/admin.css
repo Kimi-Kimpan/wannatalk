@@ -103,3 +103,4 @@ tbody tr:last-child td { border-bottom: 0; }
 .login input { min-height: 46px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); font-size: 16px; }
 .msg { min-height: 22px; font-size: 14px; color: var(--bad); }
 @media (max-width: 640px) { .tile .value { font-size: 24px; } }
+.bad-text { color: var(--bad, #B3261E); }

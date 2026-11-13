@@ -86,6 +86,33 @@ async function loadUsers() {
   if (error) { root.innerHTML = `<p>불러오지 못했어요: ${esc(error.message)}</p>`; return; }
   users = data || [];
   render();
+  loadSignup();
+}
+
+// 가입 인원 제한 ---------------------------------------------------------------------
+async function loadSignup() {
+  const box = $('signup');
+  if (!box) return;
+  const { data, error } = await sb.rpc('admin_signup_settings');
+  if (error || !data || !data[0]) { box.innerHTML = '<div class="label">가입 제한</div><div class="sub">불러오지 못했어요 (003_signup_limit.sql 실행 필요)</div>'; return; }
+  const { users: n, max_users: max } = data[0];
+  const full = max != null && Number(n) >= max;
+  box.innerHTML = `<div class="label">가입 제한</div>
+    <div class="value">${Number(n)}<span class="muted" style="font-size:18px"> / ${max == null ? '제한 없음' : max + '명'}</span></div>
+    <div class="sub">${full ? '<b class="bad-text">가득 찼어요 · 새 가입이 막혀 있어요</b>' : max == null ? '누구나 가입할 수 있어요' : `${max - Number(n)}명 더 가입할 수 있어요`}</div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn" data-n="${max == null ? Number(n) : max + 5}" type="button">${max == null ? '지금 인원으로 막기' : '+5명'}</button>
+      <button class="btn" data-n="10" type="button">10명</button>
+      ${max == null ? '' : '<button class="btn" data-n="" type="button">제한 풀기</button>'}
+    </div>`;
+  box.querySelectorAll('button[data-n]').forEach((b) => b.addEventListener('click', async () => {
+    const v = b.dataset.n === '' ? null : Number(b.dataset.n);
+    if (v === null && !confirm('제한을 풀면 주소를 아는 누구나 가입하고 AI 크레딧을 쓸 수 있어요. 풀까요?')) return;
+    b.disabled = true;
+    const { error: e2 } = await sb.rpc('admin_set_max_users', { n: v });
+    if (e2) alert('바꾸지 못했어요: ' + e2.message);
+    loadSignup();
+  }));
 }
 
 function render() {
@@ -108,6 +135,7 @@ function render() {
       <div class="tile"><div class="label">전체 사용자</div><div class="value">${users.length}</div><div class="sub">학습자 ${learners.length} · 가족 ${users.length - learners.length}</div></div>
       <div class="tile"><div class="label">오늘 접속</div><div class="value">${seenToday}</div><div class="sub">지난 24시간</div></div>
       <div class="tile"><div class="label">오늘 공부 완료</div><div class="value">${doneToday}<span class="muted" style="font-size:18px"> / ${learners.length}</span></div><div class="sub">학습자 기준</div></div>
+      <div class="tile" id="signup"><div class="label">가입 제한</div><div class="sub">불러오는 중…</div></div>
       <div class="tile"><div class="label">자서전 기록</div><div class="value">${entries}</div><div class="sub">모인 대답 수</div></div>
     </div>
 
