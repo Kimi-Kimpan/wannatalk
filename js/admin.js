@@ -92,7 +92,12 @@ async function start() {
   if (!configured) { root.innerHTML = '<p>js/config.js 설정이 필요해요.</p>'; return; }
   const { data } = await sb.auth.getSession();
   if (!data.session) return loginView();
-  if (freshLogin && inIOSBrowser() && !window.__wtHandoffShown) {
+  if (freshLogin && inIOSBrowser() && !window.__wtHandoffShown) return handoffView();
+  await afterLogin();
+}
+
+function handoffView() {
+  {
     window.__wtHandoffShown = true;
     root.innerHTML = `<div class="center">
       <div class="brand">WannaTalk</div>
@@ -101,7 +106,7 @@ async function start() {
       <button class="btn primary" id="copyLogin" type="button" style="min-height:52px;font-size:17px">앱으로 로그인 옮기기</button>
       <button class="btn" id="stayHere" type="button">이 창에서 그냥 보기</button>
     </div>`;
-    $('stayHere').addEventListener('click', start);
+    $('stayHere').addEventListener('click', afterLogin);
     $('copyLogin').addEventListener('click', async () => {
       const r = await handoffCopy(sb, 'admin.html');
       root.innerHTML = `<div class="center"><h1>${r.copied ? '복사했어요' : '아래 주소를 복사해 주세요'}</h1>
@@ -109,8 +114,11 @@ async function start() {
         <p>이 창을 닫고 앱의 <b>설정 → 관리자 계정 연결하기</b>에서 <b>복사한 로그인 붙여넣기</b>를 누르세요.</p>
         <p class="muted">이 창(Safari)에서는 로그아웃됐어요.</p></div>`;
     });
-    return;
   }
+}
+
+async function afterLogin() {
+  const { data } = await sb.auth.getSession();
   const { data: admin } = await sb.rpc('is_admin');
   if (admin !== true) {
     root.innerHTML = `<div class="center"><h1>관리자 계정이 아니에요</h1>
@@ -168,7 +176,8 @@ function render() {
       <div><div class="brand">WannaTalk</div><h1>관리자 대시보드</h1></div>
       <div class="row">
         <button class="btn" id="refresh" type="button">새로고침</button>
-        <a class="btn" href="./">앱으로</a>
+        ${inIOSBrowser() ? '<button class="btn primary" id="toApp" type="button">앱으로 로그인 옮기기</button>' : ''}
+        <a class="btn" href="./">학습 화면</a>
         <button class="btn" id="out" type="button">로그아웃</button>
       </div>
     </div>
@@ -196,6 +205,7 @@ function render() {
     <section id="detail"></section>`;
 
   $('refresh').addEventListener('click', loadUsers);
+  if ($('toApp')) $('toApp').addEventListener('click', handoffView);
   $('out').addEventListener('click', async () => { await sb.auth.signOut({ scope: 'local' }); loginView(); });
   root.querySelectorAll('tbody tr[data-id]').forEach((tr) => tr.addEventListener('click', () => openUser(tr.dataset.id)));
   if (selected) openUser(selected);

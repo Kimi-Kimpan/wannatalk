@@ -304,6 +304,11 @@ register('home', async () => {
       <button class="ghost" id="settings" type="button">설정</button>
     </div>
     <h1>${esc(p.name)}님, 안녕하세요</h1>
+    ${api.inIOSBrowser() ? `<div class="dash-card handoff-card">
+      <p class="label">지금 Safari 에서 열려 있어요</p>
+      <p>홈 화면의 WannaTalk 앱에서 쓰시려면 로그인을 앱으로 옮겨 주세요.</p>
+      <button class="big primary" id="toApp" type="button">앱으로 로그인 옮기기</button>
+    </div>` : ''}
 
     <div class="dash-card lesson-card">
       <p class="label">${doneToday ? '오늘 레슨을 마쳤어요 👏' : resuming ? '하던 레슨이 있어요' : '오늘의 레슨'}</p>
@@ -335,6 +340,7 @@ register('home', async () => {
   </section>`);
 
   on('settings', () => go('settings'));
+  on('toApp', () => handoff());
   on('start', () => go('day', { day }));
   on('review', () => go('day', { day: day - 1, review: true }));
   on('ahead', () => go('day', { day }));
