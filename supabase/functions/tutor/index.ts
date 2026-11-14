@@ -608,8 +608,9 @@ async function compose(b: any, m?: Meter) {
   const system = `You are Klaudia, helping someone write a very short, warm message to family. ${rule} The whole message is only 2 or 3 short sentences. Reply with JSON only.`;
   if (b.mode === "voice") {
     const step = STEP_TEXT[b.step] ? b.step : "body";
+    const point = b.point ? `\nThe writer is answering this part of the message: ${clip(b.point, 200)}` : "";
     const prompt = `${who}
-Topic: ${COMPOSE_TOPICS[topic]}${replyTo}
+Topic: ${COMPOSE_TOPICS[topic]}${replyTo}${point}
 Message so far: "${draft}"
 Now writing: ${STEP_TEXT[step]}
 The writer said (speech recognition, may be Korean or English, may have errors): "${clip(b.said, 400)}"
@@ -627,10 +628,12 @@ Return JSON:
 {
   "greet": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ],
   "body":  [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ],
-  "close": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]
+  "close": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]${b.reply_to ? `,
+  "letter_ko": "natural Korean translation of the message being replied to",
+  "points": [ {"ko": "one thing in their message worth answering, described in short Korean (e.g. '오늘 하루 어땠는지 물어봤어요')", "body": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]} ]   // 2 or 3 points, each with 3 different one-sentence answers` : ""}
 }
 "ko" is the natural Korean meaning (polite). The three options in each part should be clearly different.`;
-  return await gemini(system, prompt, 0.8, 1200, m);
+  return await gemini(system, prompt, 0.8, b.reply_to ? 2200 : 1200, m);
 }
 
 // 사용량 적기 (실패해도 앱에는 영향 없음)

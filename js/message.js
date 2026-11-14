@@ -21,12 +21,18 @@ const T = {
       body: '이제 하고 싶은 말을 한 문장으로 해 볼까요?',
       close: '마지막으로 끝인사를 해요.',
     },
-    pick: '이 문장 넣기', mic: '말로 쓰기', skip: '건너뛰기', undo: '한 문장 지우기',
+    pick: '이 문장 사용하기', mic: '말하기', skip: '건너뛰기', undo: '한 문장 지우기',
     draft: '지금까지 쓴 글', draftEmpty: '아직 비어 있어요',
     listening: '듣고 있어요… 한국어로 말해도 돼요', converting: '영어로 바꾸고 있어요…',
     converted: '클라우디아가 고쳐 봤어요. 비교해 보고 골라 주세요.',
+    mailbox: '편지함', sendTo: (n) => `${n}님에게 보내기`, history: '주고받은 메시지', noLetters: '아직 주고받은 메시지가 없어요.',
+    toWho: (n) => `내가 ${n}님에게`, fromWho: (n) => `${n}님이 보냄`, newMark: '새 편지', reply: '답장하기',
+    readingLetter: '클라우디아가 편지를 읽고 있어요…', theirLetter: (n) => `${n}님이 보낸 편지 보기`,
+    whichPart: (n) => `${esc(n)}님 편지에서 <b>어떤 부분에 답할까요?</b> 아래에서 골라 주세요.`,
+    answerPoint: (x) => `<b>"${esc(x)}"</b>에 답해 볼까요? 예시를 고르거나 말씀해 주세요.`,
+    ownWay: '내 마음대로 답하기', ownPoint: '하고 싶은 말',
     mine: '내가 한 말', fixed: '클라우디아가 고친 문장', same: '고칠 곳이 없어요. 잘 말했어요!',
-    useFixed: '이 문장 쓰기', sayAgain: '다시 말하기', seeExamples: '예시 보기',
+    useFixed: '이 문장 사용하기', sayAgain: '다시 말하기', seeExamples: '예시 보기',
     convertFail: '바꾸지 못했어요. 한 번 더 말씀해 주세요.',
     reviewTitle: '이렇게 보낼게요', reviewHelp: '글을 눌러서 직접 고칠 수 있어요.', meaning: '뜻',
     listen: '듣기', restart: '처음부터 다시', send: '보내기', sending: '보내는 중이에요…',
@@ -54,6 +60,12 @@ const T = {
     draft: 'Your message so far', draftEmpty: 'Nothing yet',
     listening: 'Listening…', converting: 'Writing it down…',
     converted: 'Klaudia tidied it up. Compare and choose.',
+    mailbox: 'Messages', sendTo: (n) => `Write to ${n}`, history: 'All messages', noLetters: 'No messages yet.',
+    toWho: (n) => `You → ${n}`, fromWho: (n) => `From ${n}`, newMark: 'New', reply: 'Reply',
+    readingLetter: 'Klaudia is reading the message…', theirLetter: (n) => `${n}'s message`,
+    whichPart: (n) => `Which part of ${esc(n)}'s message would you like to answer?`,
+    answerPoint: (x) => `Let's answer: <b>"${esc(x)}"</b>. Pick a line or say it.`,
+    ownWay: 'Answer my own way', ownPoint: 'What I want to say',
     mine: 'What you said', fixed: "Klaudia's version", same: 'Nothing to fix. Well said!',
     useFixed: 'Use this line', sayAgain: 'Say it again', seeExamples: 'See examples',
     convertFail: 'That did not work. Please try again.',
@@ -96,33 +108,59 @@ async function start({ to = null, topic = null, replyTo = null } = {}) {
   return writeMessage(to, topic, replyTo);
 }
 
-// 1. 받는 사람 -----------------------------------------------------------------------
+// 1. 편지함: 보낼 사람 고르기 + 주고받은 메시지 -------------------------------------------------
 async function pickRecipient(msg = '') {
   const t = T[lang()];
   loading('…');
-  let contacts = [], code = state.profile.code || '';
-  try { [contacts, code] = await Promise.all([api.myContacts(), code || api.myCode()]); } catch (e) { /* 아래에서 안내 */ }
+  let contacts = [], letters = [], code = state.profile.code || '';
+  try {
+    [contacts, letters, code] = await Promise.all([api.myContacts(), api.myLetters(state.user.id, 40), code || api.myCode()]);
+  } catch (e) { /* 보이는 만큼 */ }
   if (code && state.profile) state.profile.code = code;
-  mount(`<section class="screen scroll" lang="${lang()}">
-    <div class="bar">
-      <button class="ghost" id="quit" type="button">${t.back}</button>
-    </div>
-    <h1>${t.who}</h1>
-    <div class="stack" id="contacts">${contacts.length
-      ? contacts.map((c, i) => `<button class="big plain contact-btn" type="button" data-i="${i}">${esc(c.name || '?')}</button>`).join('')
-      : `<p class="muted">${t.noContacts}</p>`}</div>
-    <form id="addForm" class="form panel" novalidate>
-      <h2>${t.addTitle}</h2>
+  const byId = Object.fromEntries(contacts.map((c) => [c.id, c]));
+  const me = state.user.id;
+  const fmt = (d) => new Date(d).toLocaleString(lang() === 'ko' ? 'ko-KR' : 'en-GB', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const addForm = `<form id="addForm" class="form" novalidate>
       <p class="muted">${t.addHelp}</p>
       <label for="code">${t.codeLabel}</label>
       <input id="code" class="code" type="text" maxlength="6" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="AB12CD">
       <p class="msg" id="msg" role="alert">${esc(msg)}</p>
       <button class="big primary" id="addBtn" type="submit">${t.add}</button>
-    </form>
+    </form>`;
+  mount(`<section class="screen scroll mailbox" lang="${lang()}">
+    <div class="bar">
+      <button class="ghost" id="quit" type="button">${t.back}</button>
+      <div class="step-label">${t.mailbox}</div>
+    </div>
+    <h1>${t.who}</h1>
+    ${contacts.length
+      ? `<div class="stack">${contacts.map((c, i) => `<button class="big primary contact-btn" type="button" data-i="${i}">✉️ ${esc(t.sendTo(c.name || '?'))}</button>`).join('')}</div>
+         <details class="add-more" ${msg ? 'open' : ''}><summary>${t.addTitle}</summary>${addForm}</details>`
+      : `<p class="muted">${t.noContacts}</p><div class="panel"><h2>${t.addTitle}</h2>${addForm}</div>`}
+
+    <h2 class="list-title">${t.history}</h2>
+    <div class="letters">${letters.length ? letters.map((l, i) => {
+      const mine = l.from_id === me;
+      const other = byId[mine ? l.to_id : l.from_id];
+      return `<div class="letter-item ${mine ? 'mine' : ''}">
+        <div class="from">${mine ? esc(t.toWho((other && other.name) || '?')) : esc(t.fromWho((other && other.name) || '?'))} · <span class="muted">${fmt(l.created_at)}</span>${!mine && !l.handled_at ? ` <span class="count-pill">${t.newMark}</span>` : ''}</div>
+        <div class="body" lang="en">${esc(l.body)}</div>
+        <div class="row">
+          <button class="ghost hear-btn" type="button" data-i="${i}">${ICON.sound} ${t.listen}</button>
+          ${!mine && other ? `<button class="ghost reply-btn" type="button" data-i="${i}">${t.reply}</button>` : ''}
+        </div>
+      </div>`;
+    }).join('') : `<p class="muted">${t.noLetters}</p>`}</div>
+
     ${code ? `<div class="panel"><p class="label">${t.myCode}</p><p class="family-code">${esc(code)}</p><p class="muted">${t.myCodeHelp}</p></div>` : ''}
   </section>`);
   on('quit', home);
   document.querySelectorAll('.contact-btn').forEach((b) => b.addEventListener('click', () => pickTopic(contacts[Number(b.dataset.i)])));
+  document.querySelectorAll('.hear-btn').forEach((b) => b.addEventListener('click', () => speak(letters[Number(b.dataset.i)].body, { rate: 0.85, button: b })));
+  document.querySelectorAll('.reply-btn').forEach((b) => b.addEventListener('click', () => {
+    const l = letters[Number(b.dataset.i)];
+    writeMessage(byId[l.from_id], 'reply', l);
+  }));
   $('addForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const c = $('code').value.trim().toUpperCase();
@@ -159,85 +197,129 @@ async function writeMessage(to, topic, replyTo) {
   const p = state.profile;
   const writerRole = p.role === 'friend' ? 'friend' : 'learner';
   const base = {
-    writer_role: writerRole, level: p.level, reader_level: to.level || 1,
+    writer_role: writerRole, level: p.level, reader_level: (to && to.level) || 1,
     from_name: p.name, to_name: to.name, topic, reply_to: replyTo ? replyTo.body : '',
   };
-  loading(t.preparing);
+  loading(replyTo ? t.readingLetter : t.preparing);
   let plan = null;
   try {
     let notes = [];
     if (writerRole === 'learner') { try { notes = await api.recentNotes(10); } catch (e) { /* 없이 */ } }
     plan = await api.ai('compose', { ...base, mode: 'plan', notes });
   } catch (e) { /* 예시 없이 말로만 */ }
-  const lines = []; // [{en, ko}]
+  const points = plan && Array.isArray(plan.points) ? plan.points.filter((x) => x && x.ko).slice(0, 3) : [];
+  let point = null;     // 답장할 때 고른 부분
+  const lines = [];     // [{en, ko, step}]
   let si = 0;
 
-  function stepScreen(extra = null, note = '') {
-    const step = STEPS[si];
-    const options = ((plan && Array.isArray(plan[step]) ? plan[step] : []).filter((x) => x && x.en)).slice(0, 3);
-    // 말한 뒤: 내가 한 말과 클라우디아가 고친 문장을 나란히
-    let compare = '';
-    if (extra) {
-      const korean = hasHangul(extra.said);
-      const d = korean ? { mine: esc(extra.said), fixed: esc(extra.en), changed: true } : wordDiff(extra.said, extra.en);
-      compare = `<div class="compare bottom" id="compare">
-        <p class="label">${t.mine}</p>
-        <p class="mine-line" ${korean ? '' : 'lang="en"'}>${d.mine}</p>
-        <p class="label">${t.fixed}</p>
-        <p class="fixed-line" lang="en">${d.fixed}</p>
-        ${extra.ko ? `<p class="muted">${esc(extra.ko)}</p>` : ''}
-        ${!d.changed ? `<p class="praise">${t.same}</p>` : ''}
-        <div class="row">
-          <button class="mic plain mid" id="mic" type="button">${ICON.mic} ${t.sayAgain}</button>
-          <button class="primary mid" id="useFixed" type="button">${t.useFixed}</button>
-        </div>
-        ${options.length ? `<button class="link-btn small" id="examples" type="button">${t.seeExamples}</button>` : ''}
-      </div>`;
+  function optionsFor(step) {
+    if (step === 'body' && point && Array.isArray(point.body)) return point.body.filter((x) => x && x.en).slice(0, 3);
+    return (plan && Array.isArray(plan[step]) ? plan[step] : []).filter((x) => x && x.en).slice(0, 3);
+  }
+  // 클라우디아가 하는 말 (답장일 때는 편지를 기억하고 어느 부분에 답할지 물어봐요)
+  function klaudiaLine(step) {
+    if (step === 'body' && replyTo) {
+      if (point) return t.answerPoint(point.ko);
+      return t.whichPart(to.name || '');
     }
-    mount(`<section class="screen fit compose" lang="${lang()}">
+    return t.say[step];
+  }
+  function letterBox() {
+    if (!replyTo) return '';
+    const ko = plan && plan.letter_ko;
+    return `<details class="orig-letter" ${STEPS[si] === 'body' && !point ? 'open' : ''}>
+      <summary>${esc(t.theirLetter(to.name || ''))}</summary>
+      <p class="en" lang="en">${esc(replyTo.body)}</p>${ko ? `<p class="muted">${esc(ko)}</p>` : ''}
+    </details>`;
+  }
+  function frame(inner, { compact = false, noDraft = false } = {}) {
+    const step = STEPS[si];
+    mount(`<section class="screen fit compose ${compact ? 'compact' : ''}" lang="${lang()}">
       <div class="bar">
         <button class="ghost" id="quit" type="button">${t.exit}</button>
         <div class="step-label">${si + 1}/3 · ${t.steps[step]}</div>
       </div>
       <div class="progress" aria-hidden="true"><span style="width:${Math.round((si / 3) * 100)}%"></span></div>
-      <div class="emma-row">${avatar('sm')}<div class="bubble" id="bubble"><p class="ko-line">${t.say[step]}</p></div></div>
-      <div class="draft-box" id="draftBox">
+      ${compact ? '' : `<div class="emma-row">${avatar('sm')}<div class="bubble" id="bubble"><p class="ko-line">${klaudiaLine(step)}</p></div></div>`}
+      ${compact ? '' : letterBox()}
+      ${noDraft ? '' : `<div class="draft-box" id="draftBox">
         <p class="label">${t.draft}${lines.length ? ` <button class="link-btn small" id="undo" type="button">${t.undo}</button>` : ''}</p>
         ${lines.length ? `<p class="en" lang="en">${esc(lines.map((x) => x.en).join(' '))}</p>` : `<p class="muted">${t.draftEmpty}</p>`}
-      </div>
-      <p class="hint" id="hint" aria-live="polite">${esc(note || (plan ? '' : t.planFail))}</p>
-      ${extra ? compare : '<div class="sugg-list bottom" id="opts"></div>'}
-      ${extra ? '' : `<div class="compose-dock">
+      </div>`}
+      ${inner}
+    </section>`);
+    on('quit', home);
+    on('undo', () => { const last = lines.pop(); if (last) { si = last.step; if (STEPS[si] === 'body') point = null; } stepScreen(); });
+  }
+
+  async function speakNow(step, opts) {
+    const said = await hear($('mic'), $('hint'), { listening: t.listening, lang: 'auto', silenceMs: 2200 });
+    if (!said || !said[0] || !$('hint')) return;
+    $('hint').textContent = t.converting;
+    try {
+      const r = await api.ai('compose', { ...base, mode: 'voice', step, said: said[0], point: point ? point.ko : '', draft: lines.map((x) => x.en) });
+      if (!r || !r.en) throw new Error('empty');
+      compareScreen({ en: r.en, ko: r.ko || '', said: said[0] });
+    } catch (e) {
+      if ($('hint')) $('hint').textContent = t.convertFail;
+    }
+  }
+
+  // 답장: 편지의 어느 부분에 답할지 고르기
+  function pointScreen() {
+    frame(`<p class="hint" id="hint" aria-live="polite"></p>
+      <div class="stack bottom points">${points.map((x, i) => `<button class="big plain point-btn" type="button" data-i="${i}">${esc(x.ko)}</button>`).join('')}
+        <button class="link-btn" id="ownWay" type="button">${t.ownWay}</button></div>`, { noDraft: true });
+    document.querySelectorAll('.point-btn').forEach((b) => b.addEventListener('click', () => { point = points[Number(b.dataset.i)]; stepScreen(); }));
+    on('ownWay', () => { point = { ko: t.ownPoint, body: plan && plan.body }; stepScreen(); });
+  }
+
+  function stepScreen() {
+    const step = STEPS[si];
+    if (step === 'body' && replyTo && !point && points.length) return pointScreen();
+    const options = optionsFor(step);
+    frame(`<p class="hint" id="hint" aria-live="polite">${esc(plan ? '' : t.planFail)}</p>
+      <div class="sugg-list bottom" id="opts"></div>
+      <div class="compose-dock">
         ${step === 'body' ? '<span></span>' : `<button class="round-ghost" id="skip" type="button">${t.skip}</button>`}
         ${canListen ? `<button class="mic-round" id="mic" type="button" aria-label="${t.mic}">${ICON.mic}<span>${t.mic}</span></button>` : '<span></span>'}
         <span></span>
-      </div>`}
-    </section>`);
-    on('quit', home);
-    on('undo', () => { const last = lines.pop(); if (last) si = last.step; stepScreen(); });
+      </div>`);
     on('skip', () => next());
-    on('useFixed', () => { lines.push({ en: extra.en, ko: extra.ko || '', step: si }); next(); });
-    on('examples', () => stepScreen());
-    if (!extra && options.length) {
+    if (options.length) {
       carousel($('opts'), options, {
         action: t.pick,
         onListen: (x) => speak(x.en, { rate: 0.85 }),
         onPick: (x) => { lines.push({ en: x.en, ko: x.ko || '', step: si }); next(); },
       });
     }
-    on('mic', async () => {
-      const said = await hear($('mic'), $('hint'), { listening: t.listening, lang: 'auto', silenceMs: 2200 });
-      if (!said || !said[0] || !$('hint')) return;
-      $('hint').textContent = t.converting;
-      try {
-        const r = await api.ai('compose', { ...base, mode: 'voice', step, said: said[0], draft: lines.map((x) => x.en) });
-        if (!r || !r.en) throw new Error('empty');
-        stepScreen({ en: r.en, ko: r.ko || '', said: said[0] }, t.converted);
-      } catch (e) {
-        if ($('hint')) $('hint').textContent = t.convertFail;
-      }
-    });
+    on('mic', () => speakNow(step));
   }
+
+  // 말한 뒤: 내가 한 말 ↔ 클라우디아가 고친 문장. 버튼은 화면 맨 아래에 항상 보이게.
+  function compareScreen(x) {
+    const step = STEPS[si];
+    const korean = hasHangul(x.said);
+    const d = korean ? { mine: esc(x.said), fixed: esc(x.en), changed: true } : wordDiff(x.said, x.en);
+    frame(`<div class="compare" id="compare">
+        <p class="label">${t.mine}</p>
+        <p class="mine-line" ${korean ? '' : 'lang="en"'}>${d.mine}</p>
+        <p class="label">${t.fixed}</p>
+        <p class="fixed-line" lang="en">${d.fixed}</p>
+        ${x.ko ? `<p class="muted">${esc(x.ko)}</p>` : ''}
+        ${!d.changed ? `<p class="praise">${t.same}</p>` : ''}
+      </div>
+      <p class="hint" id="hint" aria-live="polite"></p>
+      <div class="compare-actions">
+        <button class="mic plain mid" id="mic" type="button">${ICON.mic} ${t.sayAgain}</button>
+        <button class="primary mid" id="useFixed" type="button">${t.useFixed}</button>
+      </div>
+      ${optionsFor(step).length ? `<button class="link-btn small" id="examples" type="button">${t.seeExamples}</button>` : ''}`, { compact: true });
+    on('useFixed', () => { lines.push({ en: x.en, ko: x.ko || '', step: si }); next(); });
+    on('examples', () => stepScreen());
+    on('mic', () => speakNow(step));
+  }
+
   function next() {
     clearSpotlight();
     si++;

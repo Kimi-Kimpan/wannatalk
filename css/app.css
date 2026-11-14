@@ -533,3 +533,42 @@ input.code { font-family: var(--font-en); font-size: 34px; letter-spacing: 8px; 
 .compare .primary { min-height: 60px; border-radius: 16px; font-size: 20px; font-weight: 700; }
 .compare .link-btn { align-self: center; }
 .compare .mic, .compare .primary { white-space: nowrap; font-size: 19px; padding: 6px 10px; gap: 6px; } .compare .mic svg { width: 24px; height: 24px; }
+
+/* 편지함 */
+.mailbox .contact-btn { font-size: 24px; min-height: 76px; }
+.add-more { border: 2px solid var(--line); border-radius: 16px; background: var(--card); }
+.add-more > summary { list-style: none; cursor: pointer; min-height: 56px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 700; font-size: 19px; color: var(--ink-soft); }
+.add-more > summary::-webkit-details-marker { display: none; }
+.add-more > summary::before { content: "+"; font-size: 24px; }
+.add-more[open] > summary::before { content: "−"; }
+.add-more > form { padding: 0 14px 14px; }
+.list-title { margin-top: 10px; }
+.letter-item .body { font-size: 21px; line-height: 1.4; margin: 4px 0; }
+.letter-item .row { gap: 8px; }
+.letter-item .ghost { min-height: 46px; font-size: 17px; }
+.msg-actions { margin-top: 8px; }
+.msg-actions .big { flex: 1; min-height: 64px; font-size: 22px; margin-top: 0; }
+
+/* 답장: 원래 편지, 답할 부분 고르기 */
+.orig-letter { background: var(--tint); border-radius: 14px; padding: 8px 12px; }
+.orig-letter > summary { cursor: pointer; font-weight: 700; font-size: 16px; color: var(--ink-soft); min-height: 36px; display: flex; align-items: center; }
+.orig-letter .en { font-size: 19px; line-height: 1.4; }
+.orig-letter[open] { max-height: 34vh; overflow-y: auto; }
+.points .point-btn { min-height: 64px; font-size: 21px; text-align: left; align-items: flex-start; }
+
+/* 비교 화면: 글이 길어도 버튼은 항상 보이게 */
+.compose.compact .compare { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.compose.compact .draft-box { flex: none; }
+.compose.compact .draft-box .en { font-size: 18px; }
+.compare-actions { display: flex; gap: 10px; flex: none; }
+.compare-actions > * { flex: 1; min-height: 64px; white-space: nowrap; font-size: 19px; padding: 6px 10px; gap: 6px; }
+.compare-actions .primary { border-radius: 16px; font-weight: 700; }
+.compare-actions .mic svg { width: 24px; height: 24px; }
+.compose.compact .link-btn.small { align-self: center; flex: none; }
+.compose.compact .hint { min-height: 0; }
+.compose .orig-letter { flex: 0 1 auto; min-height: 96px; overflow-y: auto; }
+.compose .orig-letter:not([open]) { min-height: 0; flex: none; }
+.compose .emma-row, .compose .draft-box, .compose .bar, .compose .progress { flex: none; }
+/* 내가 한 말이 길면 4줄까지만 보여서 고친 문장이 항상 보이게 */
+.compare .mine-line { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+@media (max-height: 700px) { .points .point-btn { min-height: 56px; font-size: 19px; } }

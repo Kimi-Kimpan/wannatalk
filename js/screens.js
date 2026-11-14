@@ -355,13 +355,19 @@ register('home', async () => {
       box.innerHTML = `<p class="label">✉️ 오늘 온 편지 ${n > 1 ? `<span class="count-pill">${n}통</span>` : ''}</p>
         <p class="from">${esc(from)}님이 보냈어요</p>
         <p class="snippet" lang="en">“${esc(letter.body.length > 90 ? letter.body.slice(0, 90) + '…' : letter.body)}”</p>
-        <p class="muted">레슨 처음에 함께 읽고 답장해요.</p>
-        <button class="big plain" id="writeMsg" type="button">✉️ 메시지 보내기</button>`;
+        <div class="row msg-actions">
+          <button class="big primary" id="replyMsg" type="button">답장하기</button>
+          <button class="big plain" id="writeMsg" type="button">편지함</button>
+        </div>`;
+      on('replyMsg', () => {
+        const sender = members.find((m) => m.id === letter.from_id) || { id: letter.from_id, name: from };
+        go('message', { to: sender, topic: 'reply', replyTo: letter });
+      });
       const li = document.querySelector('#steps li[data-step="letter"]');
       if (li && !doneToday && !resuming) li.hidden = false;
     } else {
       box.innerHTML = `<p class="label">✉️ 오늘 온 편지</p><p class="muted">아직 온 편지가 없어요.</p>
-        <button class="big plain" id="writeMsg" type="button">✉️ 메시지 보내기</button>`;
+        <button class="big plain" id="writeMsg" type="button">✉️ 편지함 · 메시지 보내기</button>`;
     }
     on('writeMsg', () => go('message'));
   } catch (e) {
