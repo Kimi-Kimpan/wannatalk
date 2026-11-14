@@ -519,3 +519,17 @@ input.code { font-family: var(--font-en); font-size: 34px; letter-spacing: 8px; 
   .compose-dock .mic-round { width: 78px; height: 78px; }
   .topic-btn { min-height: 58px; font-size: 20px; }
 }
+
+/* 내가 한 말 ↔ 클라우디아가 고친 문장 */
+.compare { background: var(--card); border: 3px solid var(--primary); border-radius: 18px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+.compare .label { font-size: 15px; font-weight: 700; color: var(--ink-soft); margin-top: 4px; }
+.mine-line, .fixed-line { font-size: 22px; line-height: 1.4; }
+.mine-line del { color: var(--bad); text-decoration-thickness: 2px; }
+.fixed-line { font-weight: 700; }
+.fixed-line ins { text-decoration: none; background: var(--good-bg); color: var(--good); border-radius: 6px; padding: 0 4px; }
+.compare .row { margin-top: 8px; }
+.compare .row > * { flex: 1; }
+.compare .mic { min-height: 60px; font-size: 20px; }
+.compare .primary { min-height: 60px; border-radius: 16px; font-size: 20px; font-weight: 700; }
+.compare .link-btn { align-self: center; }
+.compare .mic, .compare .primary { white-space: nowrap; font-size: 19px; padding: 6px 10px; gap: 6px; } .compare .mic svg { width: 24px; height: 24px; }

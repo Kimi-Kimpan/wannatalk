@@ -24,7 +24,9 @@ const T = {
     pick: '이 문장 넣기', mic: '말로 쓰기', skip: '건너뛰기', undo: '한 문장 지우기',
     draft: '지금까지 쓴 글', draftEmpty: '아직 비어 있어요',
     listening: '듣고 있어요… 한국어로 말해도 돼요', converting: '영어로 바꾸고 있어요…',
-    converted: '이렇게 바꿨어요. 마음에 들면 "이 문장 넣기"를 누르세요.',
+    converted: '클라우디아가 고쳐 봤어요. 비교해 보고 골라 주세요.',
+    mine: '내가 한 말', fixed: '클라우디아가 고친 문장', same: '고칠 곳이 없어요. 잘 말했어요!',
+    useFixed: '이 문장 쓰기', sayAgain: '다시 말하기', seeExamples: '예시 보기',
     convertFail: '바꾸지 못했어요. 한 번 더 말씀해 주세요.',
     reviewTitle: '이렇게 보낼게요', reviewHelp: '글을 눌러서 직접 고칠 수 있어요.', meaning: '뜻',
     listen: '듣기', restart: '처음부터 다시', send: '보내기', sending: '보내는 중이에요…',
@@ -51,7 +53,9 @@ const T = {
     pick: 'Use this line', mic: 'Speak', skip: 'Skip', undo: 'Remove last line',
     draft: 'Your message so far', draftEmpty: 'Nothing yet',
     listening: 'Listening…', converting: 'Writing it down…',
-    converted: 'Here it is in simple English. Tap "Use this line" if you like it.',
+    converted: 'Klaudia tidied it up. Compare and choose.',
+    mine: 'What you said', fixed: "Klaudia's version", same: 'Nothing to fix. Well said!',
+    useFixed: 'Use this line', sayAgain: 'Say it again', seeExamples: 'See examples',
     convertFail: 'That did not work. Please try again.',
     reviewTitle: 'Ready to send', reviewHelp: 'Tap the text to edit it.', meaning: 'Meaning',
     listen: 'Listen', restart: 'Start over', send: 'Send', sending: 'Sending…',
@@ -61,6 +65,25 @@ const T = {
   },
 };
 const STEPS = ['greet', 'body', 'close'];
+
+// 낱말 비교: 내가 한 말에서 빠지거나 바뀐 낱말은 줄을 긋고, 클라우디아 문장에서 새로 들어간 낱말은 색을 칠합니다.
+const norm = (w) => w.toLowerCase().replace(/[’`]/g, "'").replace(/[^a-z0-9']/g, '');
+function wordDiff(a, b) {
+  const A = String(a || '').split(/\s+/).filter(Boolean), B = String(b || '').split(/\s+/).filter(Boolean);
+  const n = A.length, m = B.length;
+  const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+    dp[i][j] = norm(A[i]) && norm(A[i]) === norm(B[j]) ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const keepA = new Array(n).fill(false), keepB = new Array(m).fill(false);
+  for (let i = 0, j = 0; i < n && j < m;) {
+    if (norm(A[i]) && norm(A[i]) === norm(B[j])) { keepA[i] = keepB[j] = true; i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) i++; else j++;
+  }
+  const mine = A.map((w, i) => (keepA[i] ? esc(w) : `<del>${esc(w)}</del>`)).join(' ');
+  const fixed = B.map((w, j) => (keepB[j] ? esc(w) : `<ins>${esc(w)}</ins>`)).join(' ');
+  return { mine, fixed, changed: keepA.includes(false) || keepB.includes(false) };
+}
+const hasHangul = (x) => /[\u3131-\uD79D]/.test(String(x || ''));
 
 register('message', (opts) => start(opts || {}));
 
@@ -151,7 +174,26 @@ async function writeMessage(to, topic, replyTo) {
 
   function stepScreen(extra = null, note = '') {
     const step = STEPS[si];
-    const options = [...(extra ? [extra] : []), ...((plan && Array.isArray(plan[step]) ? plan[step] : []).filter((x) => x && x.en))].slice(0, 4);
+    const options = ((plan && Array.isArray(plan[step]) ? plan[step] : []).filter((x) => x && x.en)).slice(0, 3);
+    // 말한 뒤: 내가 한 말과 클라우디아가 고친 문장을 나란히
+    let compare = '';
+    if (extra) {
+      const korean = hasHangul(extra.said);
+      const d = korean ? { mine: esc(extra.said), fixed: esc(extra.en), changed: true } : wordDiff(extra.said, extra.en);
+      compare = `<div class="compare bottom" id="compare">
+        <p class="label">${t.mine}</p>
+        <p class="mine-line" ${korean ? '' : 'lang="en"'}>${d.mine}</p>
+        <p class="label">${t.fixed}</p>
+        <p class="fixed-line" lang="en">${d.fixed}</p>
+        ${extra.ko ? `<p class="muted">${esc(extra.ko)}</p>` : ''}
+        ${!d.changed ? `<p class="praise">${t.same}</p>` : ''}
+        <div class="row">
+          <button class="mic plain mid" id="mic" type="button">${ICON.mic} ${t.sayAgain}</button>
+          <button class="primary mid" id="useFixed" type="button">${t.useFixed}</button>
+        </div>
+        ${options.length ? `<button class="link-btn small" id="examples" type="button">${t.seeExamples}</button>` : ''}
+      </div>`;
+    }
     mount(`<section class="screen fit compose" lang="${lang()}">
       <div class="bar">
         <button class="ghost" id="quit" type="button">${t.exit}</button>
@@ -164,17 +206,19 @@ async function writeMessage(to, topic, replyTo) {
         ${lines.length ? `<p class="en" lang="en">${esc(lines.map((x) => x.en).join(' '))}</p>` : `<p class="muted">${t.draftEmpty}</p>`}
       </div>
       <p class="hint" id="hint" aria-live="polite">${esc(note || (plan ? '' : t.planFail))}</p>
-      <div class="sugg-list bottom" id="opts"></div>
-      <div class="compose-dock">
+      ${extra ? compare : '<div class="sugg-list bottom" id="opts"></div>'}
+      ${extra ? '' : `<div class="compose-dock">
         ${step === 'body' ? '<span></span>' : `<button class="round-ghost" id="skip" type="button">${t.skip}</button>`}
         ${canListen ? `<button class="mic-round" id="mic" type="button" aria-label="${t.mic}">${ICON.mic}<span>${t.mic}</span></button>` : '<span></span>'}
         <span></span>
-      </div>
+      </div>`}
     </section>`);
     on('quit', home);
     on('undo', () => { const last = lines.pop(); if (last) si = last.step; stepScreen(); });
     on('skip', () => next());
-    if (options.length) {
+    on('useFixed', () => { lines.push({ en: extra.en, ko: extra.ko || '', step: si }); next(); });
+    on('examples', () => stepScreen());
+    if (!extra && options.length) {
       carousel($('opts'), options, {
         action: t.pick,
         onListen: (x) => speak(x.en, { rate: 0.85 }),
@@ -188,8 +232,7 @@ async function writeMessage(to, topic, replyTo) {
       try {
         const r = await api.ai('compose', { ...base, mode: 'voice', step, said: said[0], draft: lines.map((x) => x.en) });
         if (!r || !r.en) throw new Error('empty');
-        stepScreen({ en: r.en, ko: r.ko || '' }, t.converted);
-        spotlight($('opts'), $('hint'));
+        stepScreen({ en: r.en, ko: r.ko || '', said: said[0] }, t.converted);
       } catch (e) {
         if ($('hint')) $('hint').textContent = t.convertFail;
       }
