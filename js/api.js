@@ -27,6 +27,30 @@ export function adminClient() {
 export function adminConnected() {
   try { return !!localStorage.getItem(ADMIN_STORAGE_KEY); } catch (e) { return false; }
 }
+// 아이폰: 메일 속 링크는 Safari 에서 열려요. Safari 의 로그인을 홈 화면 앱으로 옮겨 줍니다.
+export function inIOSBrowser() {
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  return ios && !standalone;
+}
+export const freshLogin = !!window.__wtFresh;
+// 로그인을 옮길 주소를 복사하고, 이 창(Safari)에서는 로그인을 지웁니다. (서버에는 손대지 않아 앱 쪽 로그인은 그대로)
+export async function handoffCopy(client = sb, page = '') {
+  const { data } = await client.auth.getSession();
+  const ses = data && data.session;
+  if (!ses) throw new Error('no_session');
+  const base = location.origin + location.pathname.replace(/[^/]*$/, '') + page;
+  const link = `${base}#access_token=${ses.access_token}&refresh_token=${ses.refresh_token}&type=handoff`;
+  let copied = false;
+  try { await navigator.clipboard.writeText(link); copied = true; } catch (e) { /* 권한 없음 */ }
+  try { client.auth.stopAutoRefresh(); } catch (e) { /* 무시 */ }
+  try {
+    const key = client.auth.storageKey || (onAdminPage ? ADMIN_STORAGE_KEY : null);
+    if (key) localStorage.removeItem(key);
+    else Object.keys(localStorage).filter((k) => /^sb-.*-auth-token$/.test(k)).forEach((k) => localStorage.removeItem(k));
+  } catch (e) { /* 무시 */ }
+  return { link, copied };
+}
 export function disconnectAdmin() {
   try { localStorage.removeItem(ADMIN_STORAGE_KEY); } catch (e) { /* 무시 */ }
 }

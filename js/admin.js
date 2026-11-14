@@ -1,5 +1,5 @@
 // WannaTalk 관리자 화면
-import { sb, configured, signInWithLink } from './api.js';
+import { sb, configured, signInWithLink, freshLogin, inIOSBrowser, handoffCopy } from './api.js';
 import { TOPICS, LEVEL_NAMES } from './content.js';
 import { TOTAL_DAYS } from './config.js';
 
@@ -52,12 +52,21 @@ function loginView(msg = '') {
       <p class="msg" id="msg" role="alert">${esc(msg)}</p>
     </form>
     <form id="lf" class="login" novalidate>
-      <label class="muted" for="link" style="font-size:14px">휴대폰 앱에서는: 메일 속 Sign in 링크를 길게 눌러 복사한 뒤 여기에 붙여넣기</label>
+      <label class="muted" for="link" style="font-size:14px">아이폰 앱에서는: 메일 속 Sign in 을 누르면 Safari 가 열려요. 거기서 "앱으로 로그인 옮기기"를 누른 뒤 여기로 돌아와 아래 버튼을 누르세요.</label>
+      <button class="btn primary" id="pasteBtn" type="button" style="min-height:52px;font-size:17px">복사한 로그인 붙여넣기</button>
       <input id="link" type="url" inputmode="url" autocomplete="off" placeholder="https://…" aria-label="로그인 링크">
-      <button class="btn" type="submit">링크로 로그인</button>
+      <button class="btn" type="submit">이 링크로 로그인</button>
     </form>
     <a class="btn" href="./" style="align-self:center">앱으로 돌아가기</a>
   </div>`;
+  $('pasteBtn').addEventListener('click', async () => {
+    let t = '';
+    try { t = (await navigator.clipboard.readText() || '').trim(); } catch (err) { /* 권한 없음 */ }
+    if (!t) { $('msg').textContent = '복사한 로그인이 없어요. 아래 칸에 길게 눌러 붙여넣어 주세요.'; return; }
+    $('msg').textContent = '확인하는 중…';
+    try { await signInWithLink(t); start(); }
+    catch (err) { $('msg').textContent = '이 로그인은 만료됐어요. 메일을 다시 받아 주세요.'; }
+  });
   $('lf').addEventListener('submit', async (e) => {
     e.preventDefault();
     const v = $('link').value.trim();
@@ -83,6 +92,25 @@ async function start() {
   if (!configured) { root.innerHTML = '<p>js/config.js 설정이 필요해요.</p>'; return; }
   const { data } = await sb.auth.getSession();
   if (!data.session) return loginView();
+  if (freshLogin && inIOSBrowser() && !window.__wtHandoffShown) {
+    window.__wtHandoffShown = true;
+    root.innerHTML = `<div class="center">
+      <div class="brand">WannaTalk</div>
+      <h1>관리자로 로그인됐어요</h1>
+      <p class="muted">홈 화면의 WannaTalk 앱에서 관리자 화면을 쓰려면 아래 버튼을 눌러 주세요.</p>
+      <button class="btn primary" id="copyLogin" type="button" style="min-height:52px;font-size:17px">앱으로 로그인 옮기기</button>
+      <button class="btn" id="stayHere" type="button">이 창에서 그냥 보기</button>
+    </div>`;
+    $('stayHere').addEventListener('click', start);
+    $('copyLogin').addEventListener('click', async () => {
+      const r = await handoffCopy(sb, 'admin.html');
+      root.innerHTML = `<div class="center"><h1>${r.copied ? '복사했어요' : '아래 주소를 복사해 주세요'}</h1>
+        ${r.copied ? '' : `<input class="login" readonly value="${esc(r.link)}">`}
+        <p>이 창을 닫고 앱의 <b>설정 → 관리자 계정 연결하기</b>에서 <b>복사한 로그인 붙여넣기</b>를 누르세요.</p>
+        <p class="muted">이 창(Safari)에서는 로그아웃됐어요.</p></div>`;
+    });
+    return;
+  }
   const { data: admin } = await sb.rpc('is_admin');
   if (admin !== true) {
     root.innerHTML = `<div class="center"><h1>관리자 계정이 아니에요</h1>

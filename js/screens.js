@@ -29,11 +29,31 @@ register('login', () => {
       </ul>
       <div class="spacer"></div>
       <button class="big primary huge" id="start" type="button">레슨 시작하기 <small>로그인 · <span lang="en">Sign in</span></small></button>
+      <button class="big plain" id="pasteLogin" type="button">복사한 로그인 붙여넣기 <small>Safari에서 옮겨 온 로그인</small></button>
+      <p class="msg" id="msg" role="alert"></p>
       <button class="link-btn" id="toAdmin2" type="button">관리자로 로그인하기</button>
     </section>`);
+    on('pasteLogin', () => pasteLogin(false));
     on('start', () => { admin = false; stepEmail(); });
     on('toAdmin', () => { admin = true; stepEmail(); });
     on('toAdmin2', () => { admin = true; stepEmail(); });
+  }
+
+  // 클립보드의 로그인(또는 메일 링크)으로 들어가기
+  async function pasteLogin(asAdmin) {
+    const say = (t) => { if ($('msg')) $('msg').textContent = t; };
+    let t = '';
+    try { t = (await navigator.clipboard.readText() || '').trim(); } catch (err) { /* 권한 없음 */ }
+    if (!t) { say('복사한 로그인이 없어요. 메일 속 Sign in 을 눌러 Safari에서 "앱으로 로그인 옮기기"를 먼저 해 주세요.'); return; }
+    say('확인하는 중이에요…');
+    try {
+      const ses = await api.signInWithLink(t, asAdmin ? api.adminClient() : api.sb);
+      if (asAdmin) { location.href = 'admin.html'; return; }
+      state.user = ses.user;
+      boot();
+    } catch (err) {
+      say(err.message === 'no_token' ? '복사한 내용이 로그인이 아니에요. 다시 해 주세요.' : '이 로그인은 만료됐어요. 메일을 다시 받아 주세요.');
+    }
   }
 
   function stepEmail(msg = '') {
@@ -90,10 +110,10 @@ register('login', () => {
       </div>
 
       <form id="linkForm" class="form panel" novalidate>
-        <p class="lead"><b>2.</b> 다른 창에서 열렸다면</p>
-        <p class="muted">메일 속 <b lang="en">Sign in</b>을 <b>길게 눌러 "링크 복사"</b>를 고른 뒤, 아래 버튼을 누르세요.</p>
-        <button class="big primary" id="paste" type="button">복사한 링크로 로그인 <small lang="en">Paste link &amp; sign in</small></button>
-        <label for="link" class="muted small-label">붙여넣기가 안 되면 여기에 길게 눌러 붙여넣기</label>
+        <p class="lead"><b>2.</b> Safari 같은 다른 창에서 열렸다면</p>
+        <p class="muted">그 창에서 <b>앱으로 로그인 옮기기</b>를 누른 뒤, 여기로 돌아와 아래 버튼을 누르세요.</p>
+        <button class="big primary" id="paste" type="button">복사한 로그인 붙여넣기 <small lang="en">Paste sign-in</small></button>
+        <label for="link" class="muted small-label">버튼이 안 되면 여기에 길게 눌러 붙여넣기</label>
         <input id="link" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…">
         <button class="plain mid" id="linkBtn" type="submit">이 링크로 로그인</button>
       </form>
@@ -133,13 +153,7 @@ register('login', () => {
           : '이 링크는 이미 쓰였거나 만료됐어요. 메일을 다시 받아 새 링크로 해 주세요.');
       }
     }
-    on('paste', async () => {
-      let t = '';
-      try { t = (await navigator.clipboard.readText() || '').trim(); } catch (err) { /* 권한 없음 */ }
-      if (!t) { say('복사한 링크를 가져오지 못했어요. 아래 칸을 길게 눌러 붙여넣어 주세요.'); $('link').focus(); return; }
-      $('link').value = t;
-      loginWith(t);
-    });
+    on('paste', () => pasteLogin(admin));
 
     on('ok', async () => {
       const u = await api.currentUser();
@@ -156,6 +170,33 @@ register('login', () => {
   landing();
 });
 
+// 아이폰: Safari 에서 로그인됐을 때, 홈 화면 앱으로 로그인 옮기기 ---------------------------
+function handoff() {
+  mount(`<section class="screen center">
+    ${avatar('lg')}
+    <h1>로그인됐어요!</h1>
+    <p class="lead">홈 화면의 WannaTalk 앱에서 공부하시려면<br>아래 버튼을 눌러 주세요.</p>
+    <button class="big primary huge" id="copyLogin" type="button">앱으로 로그인 옮기기 <small lang="en">Move sign-in to the app</small></button>
+    <button class="link-btn" id="stayHere" type="button">이 창에서 그냥 공부하기</button>
+  </section>`);
+  on('stayHere', () => boot());
+  on('copyLogin', async () => {
+    let r;
+    try { r = await api.handoffCopy(); } catch (e) { return boot(); }
+    mount(`<section class="screen center">
+      <h1>${r.copied ? '복사했어요' : '한 번만 더 해 주세요'}</h1>
+      ${r.copied ? '' : `<p class="lead">아래 칸을 길게 눌러 <b>전체 선택 → 복사</b> 해 주세요.</p>
+        <input type="url" readonly value="${esc(r.link)}" id="lk" style="width:100%">`}
+      <div class="panel" style="text-align:left">
+        <p class="lead"><b>1.</b> 이 창을 닫고 홈 화면의 <b>WannaTalk</b> 앱을 여세요.</p>
+        <p class="lead"><b>2.</b> <b>복사한 로그인 붙여넣기</b>를 누르면 끝이에요.</p>
+      </div>
+      <p class="note">이 창(Safari)에서는 로그아웃됐어요.</p>
+    </section>`);
+    const lk = $('lk'); if (lk) { lk.focus(); lk.select(); }
+  });
+}
+
 // 로그인 뒤 어디로 갈지 정하기 ---------------------------------------------------------
 export async function boot() {
   loading('불러오는 중이에요…');
@@ -171,6 +212,7 @@ export async function boot() {
     if (!p) throw new Error('no profile');
     state.profile = p;
     api.touchSeen(state.user.id).catch(() => {});
+    if (api.freshLogin && api.inIOSBrowser() && !state.handoffShown) { state.handoffShown = true; return handoff(); }
     if (!p.name || !p.role) return go('setup');
     if (p.role === 'friend') return go('friend');
     if (!p.placement) return go('placement');
