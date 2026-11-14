@@ -128,6 +128,28 @@ export async function signInWithLink(raw, client = sb) {
   throw lastErr || new Error('verify_failed');
 }
 
+// 아이디·비밀번호 ---------------------------------------------------------------------
+export async function loginWithId(username, password, client = sb) {
+  const { data, error } = await client.functions.invoke('tutor', { body: { action: 'login', username, password } });
+  if (error) {
+    const st = error.context && error.context.status;
+    throw new Error(st === 429 ? 'too_many' : st === 401 ? 'invalid' : 'network');
+  }
+  if (!data || !data.access_token) throw new Error('invalid');
+  const { data: d2, error: e2 } = await client.auth.setSession({ access_token: data.access_token, refresh_token: data.refresh_token });
+  if (e2) throw e2;
+  return d2.session;
+}
+export async function setUsername(u) {
+  const { data, error } = await sb.rpc('set_username', { u });
+  if (error) throw new Error(/taken/.test(error.message || '') ? 'taken' : /invalid/.test(error.message || '') ? 'invalid' : 'error');
+  return data;
+}
+export async function setPassword(pw) {
+  const { error } = await sb.auth.updateUser({ password: pw });
+  if (error) throw error;
+}
+
 export async function currentUser() {
   const { data } = await sb.auth.getSession();
   return data.session ? data.session.user : null;

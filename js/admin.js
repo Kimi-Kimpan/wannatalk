@@ -1,5 +1,5 @@
 // WannaTalk 관리자 화면
-import { sb, configured, signInWithLink, freshLogin, inIOSBrowser, handoffCopy } from './api.js';
+import { sb, configured, signInWithLink, freshLogin, inIOSBrowser, handoffCopy, loginWithId } from './api.js';
 import { TOPICS, LEVEL_NAMES } from './content.js';
 import { TOTAL_DAYS } from './config.js';
 
@@ -46,6 +46,12 @@ function loginView(msg = '') {
   root.innerHTML = `<div class="center">
     <div class="brand">WannaTalk</div>
     <h1>관리자 로그인</h1>
+    <form id="idf" class="login" novalidate>
+      <input id="uid" type="text" autocomplete="username" autocapitalize="off" placeholder="아이디" aria-label="아이디">
+      <input id="pw" type="password" autocomplete="current-password" placeholder="비밀번호" aria-label="비밀번호">
+      <button class="btn primary" type="submit" style="min-height:46px">아이디로 로그인</button>
+    </form>
+    <p class="muted" style="font-size:14px">또는 로그인 메일 받기</p>
     <form id="f" class="login" novalidate>
       <input id="email" type="email" autocomplete="email" placeholder="관리자 이메일" aria-label="관리자 이메일">
       <button class="btn primary" type="submit">로그인 메일 받기</button>
@@ -66,6 +72,12 @@ function loginView(msg = '') {
     $('msg').textContent = '확인하는 중…';
     try { await signInWithLink(t); start(); }
     catch (err) { $('msg').textContent = '이 로그인은 만료됐어요. 메일을 다시 받아 주세요.'; }
+  });
+  $('idf').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('msg').textContent = '확인하는 중…';
+    try { await loginWithId($('uid').value.trim(), $('pw').value); start(); }
+    catch (err) { $('msg').textContent = err.message === 'too_many' ? '여러 번 틀려서 잠시 막혔어요. 한 시간 뒤 다시 해 주세요.' : '아이디나 비밀번호가 맞지 않아요.'; }
   });
   $('lf').addEventListener('submit', async (e) => {
     e.preventDefault();

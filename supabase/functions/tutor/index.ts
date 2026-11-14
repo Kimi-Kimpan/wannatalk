@@ -653,6 +653,54 @@ async function saveUsage(url: string, key: string, token: string, action: string
   }
 }
 
+// ---------------------------------------------------------------------------
+// 아이디·비밀번호 로그인: 아이디로 이메일을 찾아 Supabase 비밀번호 로그인을 대신 해 주고, 로그인 열쇠만 돌려줍니다.
+function serviceKey(): string | undefined {
+  const direct = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (direct) return direct;
+  const raw = Deno.env.get("SUPABASE_SECRET_KEYS");
+  if (raw) {
+    try { const first = Object.values(JSON.parse(raw))[0]; if (typeof first === "string") return first; } catch { /* 무시 */ }
+  }
+  return undefined;
+}
+function publicKey(): string | undefined {
+  const direct = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
+  if (direct) return direct;
+  const raw = Deno.env.get("SUPABASE_PUBLISHABLE_KEYS");
+  if (raw) {
+    try { const first = Object.values(JSON.parse(raw))[0]; if (typeof first === "string") return first; } catch { /* 무시 */ }
+  }
+  return undefined;
+}
+async function passwordLogin(b: any): Promise<Response> {
+  const url = Deno.env.get("SUPABASE_URL");
+  const svc = serviceKey(), pub = publicKey();
+  const u = clip(b.username, 40).trim().toLowerCase();
+  const pw = clip(b.password, 200);
+  if (!url || !svc || !pub) return json({ error: "server_error" }, 500);
+  if (!u || !pw) return json({ error: "invalid" }, 401);
+  const admin = createClient(url, svc, { auth: { persistSession: false } });
+  const since = new Date(Date.now() - 3600_000).toISOString();
+  const { count } = await admin.from("login_failures").select("username", { count: "exact", head: true }).eq("username", u).gte("at", since);
+  if ((count || 0) >= 10) return json({ error: "too_many" }, 429);
+  const { data: email } = await admin.rpc("email_for_login", { u });
+  if (typeof email === "string" && email) {
+    const r = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: { apikey: pub, "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password: pw }),
+    });
+    if (r.ok) {
+      const ses = await r.json();
+      return json({ access_token: ses.access_token, refresh_token: ses.refresh_token });
+    }
+    console.error("password login failed", r.status);
+  }
+  await admin.from("login_failures").insert({ username: u });
+  return json({ error: "invalid" }, 401);
+}
+
 // 프로젝트 키 찾기 (예전 anon 키 / 새 publishable 키 모두 지원)
 function projectKey(): string | undefined {
   const direct = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
@@ -673,6 +721,11 @@ function projectKey(): string | undefined {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
+
+  // 아이디·비밀번호 로그인은 로그인 전에 씁니다.
+  let early: any = null;
+  try { early = await req.clone().json(); } catch { /* 아래에서 처리 */ }
+  if (early?.action === "login") return await passwordLogin(early);
 
   // 로그인한 사용자만 사용할 수 있습니다.
   const url = Deno.env.get("SUPABASE_URL");

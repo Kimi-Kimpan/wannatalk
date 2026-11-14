@@ -41,10 +41,10 @@ register('login', () => {
       <button class="link-btn" id="toAdmin2" type="button">관리자로 로그인하기</button>
     </section>`);
     on('pasteLogin', () => pasteLogin(false));
-    on('start', () => { admin = false; stepEmail(); });
+    on('start', () => { admin = false; stepId(); });
     on('resend', () => { admin = false; stepEmail(); });
-    on('toAdmin', () => { admin = true; stepEmail(); });
-    on('toAdmin2', () => { admin = true; stepEmail(); });
+    on('toAdmin', () => { admin = true; stepId(); });
+    on('toAdmin2', () => { admin = true; stepId(); });
   }
 
   // 클립보드의 로그인(또는 메일 링크)으로 들어가기
@@ -64,10 +64,53 @@ register('login', () => {
     }
   }
 
-  function stepEmail(msg = '') {
+  // 아이디·비밀번호로 로그인 (처음이면 이메일로)
+  function stepId(msg = '') {
     mount(`<section class="screen">
       <div class="bar">
         <button class="ghost" id="back" type="button">← 처음 화면</button>
+        <div class="mode-pill ${admin ? 'admin' : ''}">${admin ? '관리자 로그인' : '레슨 로그인'}</div>
+      </div>
+      <h1>${admin ? '관리자 로그인' : '로그인'}</h1>
+      <form id="idf" class="form" novalidate>
+        <label for="uid">아이디</label>
+        <input id="uid" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" inputmode="text">
+        <label for="pw">비밀번호</label>
+        <input id="pw" type="password" autocomplete="current-password">
+        <p class="msg" id="msg" role="alert">${esc(msg)}</p>
+        <button class="big primary" type="submit" id="idBtn">로그인</button>
+      </form>
+      <div class="panel">
+        <p class="lead">처음이거나 아이디가 없으면</p>
+        <button class="big plain" id="toEmail" type="button">이메일로 로그인하기 <small>로그인 메일을 받아요</small></button>
+        <p class="note">이메일로 들어간 뒤 <b>설정</b>에서 아이디와 비밀번호를 만들면, 다음부터는 메일 없이 들어올 수 있어요.</p>
+      </div>
+    </section>`);
+    on('back', landing);
+    on('toEmail', () => stepEmail());
+    $('idf').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const u = $('uid').value.trim(), pw = $('pw').value;
+      if (!u || !pw) { $('msg').textContent = '아이디와 비밀번호를 적어 주세요.'; return; }
+      $('idBtn').disabled = true;
+      $('msg').textContent = '확인하는 중이에요…';
+      try {
+        const ses = await api.loginWithId(u, pw, admin ? api.adminClient() : api.sb);
+        if (admin) { location.href = 'admin.html'; return; }
+        state.user = ses.user;
+        boot();
+      } catch (err) {
+        $('idBtn').disabled = false;
+        $('msg').textContent = err.message === 'too_many' ? '여러 번 틀려서 잠시 막혔어요. 한 시간 뒤에 다시 해 주세요.'
+          : err.message === 'invalid' ? '아이디나 비밀번호가 맞지 않아요.' : '인터넷을 확인하고 다시 눌러 주세요.';
+      }
+    });
+  }
+
+  function stepEmail(msg = '') {
+    mount(`<section class="screen">
+      <div class="bar">
+        <button class="ghost" id="back" type="button">← 돌아가기</button>
         <div class="mode-pill ${admin ? 'admin' : ''}">${admin ? '관리자 로그인' : '레슨 로그인'}</div>
       </div>
       <h1>${admin ? '관리자 이메일을 적어 주세요' : '이메일로 시작해요'}</h1>
@@ -81,7 +124,7 @@ register('login', () => {
       <button class="link-btn" id="switch" type="button">${admin ? '레슨 받는 사람으로 로그인하기' : '관리자로 로그인하기'}</button>
       <p class="note">메일로 로그인 링크를 보내 드려요. 한 번 로그인하면 다음부터는 바로 열려요.</p>
     </section>`);
-    on('back', landing);
+    on('back', () => stepId());
     on('switch', () => { admin = !admin; stepEmail(); });
     $('f').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -400,6 +443,27 @@ register('settings', async () => {
       <div class="step-label">설정</div>
     </div>
 
+    <form class="panel form" id="nameForm" novalidate>
+      <h2>내 이름</h2>
+      <p class="muted">편지를 받는 사람에게 이 이름으로 보여요.</p>
+      <input id="nameIn" type="text" maxlength="40" value="${esc(p.name || '')}" aria-label="내 이름">
+      <p class="msg" id="nameMsg" role="status"></p>
+      <button class="plain mid" type="submit">이름 저장</button>
+    </form>
+
+    <form class="panel form" id="idForm" novalidate>
+      <h2>아이디와 비밀번호</h2>
+      <p class="muted">${p.username ? `지금 아이디: <b>${esc(p.username)}</b>. 비밀번호를 바꾸려면 새로 적어 주세요.` : '만들어 두면 다음부터 메일 없이 아이디와 비밀번호로 들어올 수 있어요. 지금까지 공부한 내용은 그대로 이어져요.'}</p>
+      <label for="newId">아이디 <span class="muted">(한글·영문·숫자 2~20자)</span></label>
+      <input id="newId" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="20" value="${esc(p.username || '')}">
+      <label for="newPw">비밀번호 <span class="muted">(6자 이상)</span></label>
+      <input id="newPw" type="password" autocomplete="new-password">
+      <label for="newPw2">비밀번호 한 번 더</label>
+      <input id="newPw2" type="password" autocomplete="new-password">
+      <p class="msg" id="idMsg" role="status"></p>
+      <button class="big primary" type="submit" id="idSave">${p.username ? '저장하기' : '아이디 만들기'}</button>
+    </form>
+
     <div class="panel">
       <h2>공부 단계</h2>
       <p>지금 <b>${p.level}단계</b> · ${esc(LEVEL_NAMES[p.level])}</p>
@@ -437,6 +501,39 @@ register('settings', async () => {
   </section>`);
 
   on('back', () => go('home'));
+  $('nameForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('nameIn').value.trim().slice(0, 40);
+    if (!name) { $('nameMsg').textContent = '이름을 적어 주세요.'; return; }
+    try { state.profile = await api.updateProfile(state.user.id, { name }); $('nameMsg').textContent = '저장했어요.'; }
+    catch (err) { $('nameMsg').textContent = '저장하지 못했어요. 다시 눌러 주세요.'; }
+  });
+  $('idForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const say = (x) => { $('idMsg').textContent = x; };
+    const id = $('newId').value.trim().toLowerCase(), pw = $('newPw').value, pw2 = $('newPw2').value;
+    if (!/^[0-9a-z가-힣_]{2,20}$/.test(id)) return say('아이디는 한글·영문·숫자로 2~20자예요. 띄어쓰기는 안 돼요.');
+    if (!p.username && !pw) return say('비밀번호를 적어 주세요.');
+    if (pw && pw.length < 6) return say('비밀번호는 6자 이상이에요.');
+    if (pw !== pw2) return say('비밀번호 두 칸이 서로 달라요.');
+    $('idSave').disabled = true;
+    say('저장하는 중이에요…');
+    try {
+      if (id !== p.username) await api.setUsername(id);
+      if (pw) await api.setPassword(pw);
+      state.profile = await api.getProfile(state.user.id);
+      say(`저장했어요. 다음부터 아이디 "${id}"와 비밀번호로 들어올 수 있어요.`);
+      $('newPw').value = ''; $('newPw2').value = '';
+    } catch (err) {
+      say(err.message === 'taken' ? '이미 쓰고 있는 아이디예요. 다른 아이디를 적어 주세요.'
+        : err.message === 'invalid' ? '아이디는 한글·영문·숫자로 2~20자예요.'
+        : /same|different from the old/i.test(err.message || '') ? '지금 비밀번호와 같아요. 다른 비밀번호를 적어 주세요.'
+        : /weak|short|least/i.test(err.message || '') ? '비밀번호가 너무 쉬워요. 더 길게 적어 주세요.'
+        : '저장하지 못했어요. 다시 눌러 주세요.');
+    } finally {
+      if ($('idSave')) $('idSave').disabled = false;
+    }
+  });
   if (!p.code) api.myCode().then((c) => { p.code = c; if ($('myCode')) $('myCode').textContent = c; }).catch(() => {});
   async function setLevel(lv) {
     try { state.profile = await api.updateProfile(state.user.id, { level: lv }); go('settings'); } catch (e) { /* 무시 */ }
