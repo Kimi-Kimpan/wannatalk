@@ -91,7 +91,7 @@ register('login', () => {
         $('msg').textContent = /saving new user|signup_limit|database error/i.test(err.message || '')
           ? '지금은 가입 인원이 다 찼어요. 관리자에게 문의해 주세요. · Sign-ups are full right now.'
           : /rate|seconds|limit/i.test(err.message || '')
-          ? '메일을 너무 자주 보냈어요. 몇 분 뒤에 다시 눌러 주세요.'
+          ? '로그인 메일을 너무 많이 보냈어요. 한 시간에 2통까지만 보낼 수 있어서, 잠시 뒤 다시 눌러 주세요.'
           : admin ? '보내지 못했어요. 관리자 이메일이 맞는지, 앱에 가입된 주소인지 확인해 주세요.'
           : '메일을 보내지 못했어요. 주소를 확인하고 다시 눌러 주세요.';
       }

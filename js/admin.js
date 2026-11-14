@@ -83,7 +83,10 @@ function loginView(msg = '') {
     const { error } = await sb.auth.signInWithOtp({
       email, options: { shouldCreateUser: false, emailRedirectTo: location.origin + location.pathname },
     });
-    $('msg').textContent = error ? '보내지 못했어요. 잠시 뒤 다시 해 주세요.' : '메일함에서 Sign in 을 눌러 주세요.';
+    $('msg').textContent = !error ? '메일함에서 Sign in 을 눌러 주세요.'
+      : /rate|seconds|429|too many/i.test(error.message || '') || error.status === 429
+        ? '로그인 메일을 너무 많이 보냈어요. 지금 설정에서는 한 시간에 2통까지만 보낼 수 있어서, 잠시 뒤 다시 해 주세요.'
+        : '보내지 못했어요. 관리자 이메일이 맞는지 확인해 주세요.';
   });
 }
 
