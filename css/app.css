@@ -594,3 +594,19 @@ body.sheet-open { overflow: hidden; }
 .sheet-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 2px; }
 .sheet .big { flex: none; }
 @keyframes sheetUp { from { transform: translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+/* 답장: 편지 보기 (작은 글씨 + 아래 화살표) */
+.letter-link { align-self: flex-end; flex: none; margin-top: -4px; min-height: 36px; padding: 0 4px; font-size: 16px; font-weight: 700; color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+.letter-pop .big-letter { font-size: 24px; line-height: 1.5; font-weight: 700; }
+.letter-pop .big-letter-ko { font-size: 20px; line-height: 1.5; }
+.letter-pop .ghost { align-self: flex-start; }
+.compose .hint:empty { display: none; }
+.compose .draft-box { padding: 8px 12px; gap: 2px; }
+.compose .letter-link { margin-top: -8px; min-height: 30px; }
+.compose .ko-line { font-size: 19px; line-height: 1.4; }
+@media (max-height: 760px) {
+  .compose .ko-line { font-size: 17px; }
+  .compose .draft-box .en { font-size: 19px; }
+  .compose-dock { padding-top: 4px; }
+  .compose-dock .mic-round { width: 74px; height: 74px; }
+  .compose-dock .mic-round svg { width: 26px; height: 26px; }
+}

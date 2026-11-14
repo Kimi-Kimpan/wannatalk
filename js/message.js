@@ -28,10 +28,8 @@ const T = {
     me: '나', waiting: '답장 기다리는 중', seeAll: '전체 대화 보기', close: '닫기',
     mailbox: '편지함', sendTo: (n) => `${n}님에게 보내기`, history: '주고받은 메시지', noLetters: '아직 주고받은 메시지가 없어요.',
     toWho: (n) => `내가 ${n}님에게`, fromWho: (n) => `${n}님이 보냄`, newMark: '새 편지', reply: '답장하기',
-    readingLetter: '클라우디아가 편지를 읽고 있어요…', theirLetter: (n) => `${n}님이 보낸 편지 보기`,
-    whichPart: (n) => `${esc(n)}님 편지에서 <b>어떤 부분에 답할까요?</b> 아래에서 골라 주세요.`,
-    answerPoint: (x) => `<b>"${esc(x)}"</b>에 답해 볼까요? 예시를 고르거나 말씀해 주세요.`,
-    ownWay: '내 마음대로 답하기', ownPoint: '하고 싶은 말',
+    readingLetter: '클라우디아가 편지를 읽고 있어요…', theirLetter: (n) => `${n}님 편지 보기`,
+    replyHint: (ps) => ps.length ? `<b>이런 이야기를 써 볼까요?</b><br>${ps.slice(0, 2).map((x) => '· ' + esc(x)).join('<br>')}` : '<b>편지에 대한 답을 한 문장으로 해 볼까요?</b>',
     mine: '내가 한 말', fixed: '클라우디아가 고친 문장', same: '고칠 곳이 없어요. 잘 말했어요!',
     useFixed: '이 문장 사용하기', sayAgain: '다시 말하기', seeExamples: '예시 보기',
     convertFail: '바꾸지 못했어요. 한 번 더 말씀해 주세요.',
@@ -65,9 +63,7 @@ const T = {
     mailbox: 'Messages', sendTo: (n) => `Write to ${n}`, history: 'All messages', noLetters: 'No messages yet.',
     toWho: (n) => `You → ${n}`, fromWho: (n) => `From ${n}`, newMark: 'New', reply: 'Reply',
     readingLetter: 'Klaudia is reading the message…', theirLetter: (n) => `${n}'s message`,
-    whichPart: (n) => `Which part of ${esc(n)}'s message would you like to answer?`,
-    answerPoint: (x) => `Let's answer: <b>"${esc(x)}"</b>. Pick a line or say it.`,
-    ownWay: 'Answer my own way', ownPoint: 'What I want to say',
+    replyHint: (ps) => ps.length ? `<b>You could write about:</b><br>${ps.slice(0, 2).map((x) => '· ' + esc(x)).join('<br>')}` : '<b>Answer their message in one short sentence.</b>',
     mine: 'What you said', fixed: "Klaudia's version", same: 'Nothing to fix. Well said!',
     useFixed: 'Use this line', sayAgain: 'Say it again', seeExamples: 'See examples',
     convertFail: 'That did not work. Please try again.',
@@ -255,29 +251,47 @@ async function writeMessage(to, topic, replyTo) {
     plan = await api.ai('compose', { ...base, mode: 'plan', notes });
   } catch (e) { /* 예시 없이 말로만 */ }
   const points = plan && Array.isArray(plan.points) ? plan.points.filter((x) => x && x.ko).slice(0, 3) : [];
-  let point = null;     // 답장할 때 고른 부분
   const lines = [];     // [{en, ko, step}]
   let si = 0;
 
   function optionsFor(step) {
-    if (step === 'body' && point && Array.isArray(point.body)) return point.body.filter((x) => x && x.en).slice(0, 3);
-    return (plan && Array.isArray(plan[step]) ? plan[step] : []).filter((x) => x && x.en).slice(0, 3);
+    const ok = (x) => x && x.en;
+    if (step === 'body' && points.length) {
+      const fromPoints = points.map((p0) => (Array.isArray(p0.body) ? p0.body.find(ok) : null)).filter(Boolean);
+      const rest = (plan && Array.isArray(plan.body) ? plan.body : []).filter(ok);
+      return [...fromPoints, ...rest].slice(0, 4);
+    }
+    return (plan && Array.isArray(plan[step]) ? plan[step] : []).filter(ok).slice(0, 3);
   }
   // 클라우디아가 하는 말 (답장일 때는 편지를 기억하고 어느 부분에 답할지 물어봐요)
   function klaudiaLine(step) {
-    if (step === 'body' && replyTo) {
-      if (point) return t.answerPoint(point.ko);
-      return t.whichPart(to.name || '');
-    }
+    if (step === 'body' && replyTo) return t.replyHint(lang() === 'ko' ? points.map((x) => x.ko) : []);
     return t.say[step];
   }
-  function letterBox() {
+  function letterLink() {
     if (!replyTo) return '';
+    return `<button class="letter-link" id="seeLetter" type="button">${esc(t.theirLetter(to.name || ''))} <span aria-hidden="true">▾</span></button>`;
+  }
+  function openLetter() {
     const ko = plan && plan.letter_ko;
-    return `<details class="orig-letter" ${STEPS[si] === 'body' && !point ? 'open' : ''}>
-      <summary>${esc(t.theirLetter(to.name || ''))}</summary>
-      <p class="en" lang="en">${esc(replyTo.body)}</p>${ko ? `<p class="muted">${esc(ko)}</p>` : ''}
-    </details>`;
+    const pop = document.createElement('div');
+    pop.className = 'sheet letter-pop';
+    pop.setAttribute('role', 'dialog');
+    pop.setAttribute('aria-modal', 'true');
+    pop.innerHTML = `<div class="sheet-inner" lang="${lang()}">
+      <div class="bar"><b class="sheet-title">${esc(t.theirLetter(to.name || ''))}</b><button class="ghost" id="letterClose" type="button">${t.close}</button></div>
+      <div class="sheet-list">
+        <p class="en big-letter" lang="en">${esc(replyTo.body)}</p>
+        ${ko ? `<p class="muted big-letter-ko">${esc(ko)}</p>` : ''}
+        <button class="ghost" id="letterHear" type="button">${ICON.sound} ${t.listen}</button>
+      </div>
+    </div>`;
+    document.body.appendChild(pop);
+    document.body.classList.add('sheet-open');
+    const close = () => { pop.remove(); document.body.classList.remove('sheet-open'); };
+    pop.querySelector('#letterClose').addEventListener('click', close);
+    pop.querySelector('#letterHear').addEventListener('click', (e) => speak(replyTo.body, { rate: 0.85, button: e.currentTarget }));
+    pop.querySelector('#letterClose').focus();
   }
   function frame(inner, { compact = false, noDraft = false } = {}) {
     const step = STEPS[si];
@@ -287,8 +301,8 @@ async function writeMessage(to, topic, replyTo) {
         <div class="step-label">${si + 1}/3 · ${t.steps[step]}</div>
       </div>
       <div class="progress" aria-hidden="true"><span style="width:${Math.round((si / 3) * 100)}%"></span></div>
+      ${letterLink()}
       ${compact ? '' : `<div class="emma-row">${avatar('sm')}<div class="bubble" id="bubble"><p class="ko-line">${klaudiaLine(step)}</p></div></div>`}
-      ${compact ? '' : letterBox()}
       ${noDraft ? '' : `<div class="draft-box" id="draftBox">
         <p class="label">${t.draft}${lines.length ? ` <button class="link-btn small" id="undo" type="button">${t.undo}</button>` : ''}</p>
         ${lines.length ? `<p class="en" lang="en">${esc(lines.map((x) => x.en).join(' '))}</p>` : `<p class="muted">${t.draftEmpty}</p>`}
@@ -296,7 +310,8 @@ async function writeMessage(to, topic, replyTo) {
       ${inner}
     </section>`);
     on('quit', home);
-    on('undo', () => { const last = lines.pop(); if (last) { si = last.step; if (STEPS[si] === 'body') point = null; } stepScreen(); });
+    on('seeLetter', openLetter);
+    on('undo', () => { const last = lines.pop(); if (last) si = last.step; stepScreen(); });
   }
 
   async function speakNow(step, opts) {
@@ -304,7 +319,7 @@ async function writeMessage(to, topic, replyTo) {
     if (!said || !said[0] || !$('hint')) return;
     $('hint').textContent = t.converting;
     try {
-      const r = await api.ai('compose', { ...base, mode: 'voice', step, said: said[0], point: point ? point.ko : '', draft: lines.map((x) => x.en) });
+      const r = await api.ai('compose', { ...base, mode: 'voice', step, said: said[0], draft: lines.map((x) => x.en) });
       if (!r || !r.en) throw new Error('empty');
       compareScreen({ en: r.en, ko: r.ko || '', said: said[0] });
     } catch (e) {
@@ -312,18 +327,8 @@ async function writeMessage(to, topic, replyTo) {
     }
   }
 
-  // 답장: 편지의 어느 부분에 답할지 고르기
-  function pointScreen() {
-    frame(`<p class="hint" id="hint" aria-live="polite"></p>
-      <div class="stack bottom points">${points.map((x, i) => `<button class="big plain point-btn" type="button" data-i="${i}">${esc(x.ko)}</button>`).join('')}
-        <button class="link-btn" id="ownWay" type="button">${t.ownWay}</button></div>`, { noDraft: true });
-    document.querySelectorAll('.point-btn').forEach((b) => b.addEventListener('click', () => { point = points[Number(b.dataset.i)]; stepScreen(); }));
-    on('ownWay', () => { point = { ko: t.ownPoint, body: plan && plan.body }; stepScreen(); });
-  }
-
   function stepScreen() {
     const step = STEPS[si];
-    if (step === 'body' && replyTo && !point && points.length) return pointScreen();
     const options = optionsFor(step);
     frame(`<p class="hint" id="hint" aria-live="polite">${esc(plan ? '' : t.planFail)}</p>
       <div class="sugg-list bottom" id="opts"></div>
