@@ -85,6 +85,23 @@ async function callGemini(model: string, key: string, body: unknown, ms: number,
   }
 }
 
+// ---------------------------------------------------------------------------
+// 사용량 기록: 요청마다 쓴 모델과 양을 모아 두었다가 ai_usage 표에 적습니다. 금액은 요금표로 계산한 추정치.
+type Use = { provider: string; model: string; input_tokens?: number; output_tokens?: number; units?: number; cost: number };
+type Meter = Use[];
+// 1M 토큰당 [입력, 출력] 달러 (Gemini 는 무료 키라 0)
+const PRICES: Record<string, [number, number]> = {
+  "gpt-6.1-terra": [1, 5],
+  "gpt-6-luna": [0.1, 0.5],
+};
+function textCost(model: string, inp: number, out: number): number {
+  const p = PRICES[model] || (model.startsWith("gemini") ? [0, 0] : [1, 5]);
+  return (inp * p[0] + out * p[1]) / 1_000_000;
+}
+// 목소리: 1분(약 750자)에 약 1.5센트 · 받아 적기: 1분에 0.3~0.6센트
+const TTS_PER_CHAR = 0.00002;
+const STT_PER_SEC: Record<string, number> = { "gpt-transcribe": 0.0045 / 60, "gpt-4o-mini-transcribe": 0.003 / 60, "whisper-1": 0.006 / 60 };
+
 // 모델 순서. 붐비거나 느리면 다음 모델을 함께 불러 먼저 온 답을 씁니다.
 // OPENAI_API_KEY 가 있으면 OpenAI(Terra → Luna)를 먼저, 그다음 Gemini.
 type Choice = { provider: "openai" | "gemini"; model: string };
@@ -109,7 +126,7 @@ function parseJson(text: string): any {
 }
 
 // OpenAI 한 번 시도 (안 맞는 옵션은 빼고 다시)
-async function tryOpenAI(model: string, system: string, prompt: string, temperature: number, maxTokens: number, signal: AbortSignal): Promise<any> {
+async function tryOpenAI(model: string, system: string, prompt: string, temperature: number, maxTokens: number, signal: AbortSignal, meter?: Meter): Promise<any> {
   const key = Deno.env.get("OPENAI_API_KEY")!;
   // 새 OpenAI 모델은 temperature 를 기본값만 받아서 보내지 않습니다.
   let extras: Record<string, unknown> = { reasoning_effort: "low" };
@@ -144,8 +161,11 @@ async function tryOpenAI(model: string, system: string, prompt: string, temperat
     if (res.ok) {
       const data = await res.json();
       const text = data?.choices?.[0]?.message?.content ?? "";
+      const inp = Number(data?.usage?.prompt_tokens) || 0, out = Number(data?.usage?.completion_tokens) || 0;
       try {
-        return parseJson(text);
+        const parsed = parseJson(text);
+        meter?.push({ provider: "openai", model, input_tokens: inp, output_tokens: out, cost: textCost(model, inp, out) });
+        return parsed;
       } catch {
         console.error("bad json", model, String(text).slice(0, 200));
         if (attempt < 1) continue;
@@ -167,7 +187,7 @@ async function tryOpenAI(model: string, system: string, prompt: string, temperat
 }
 
 // Gemini 한 번 시도 (생각 설정이 안 맞으면 끄고 다시)
-async function tryGemini(model: string, system: string, prompt: string, temperature: number, maxTokens: number, signal: AbortSignal): Promise<any> {
+async function tryGemini(model: string, system: string, prompt: string, temperature: number, maxTokens: number, signal: AbortSignal, meter?: Meter): Promise<any> {
   const key = Deno.env.get("GEMINI_API_KEY")!;
   let thinking = true;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -183,8 +203,11 @@ async function tryGemini(model: string, system: string, prompt: string, temperat
     if (res.ok) {
       const data = await res.json();
       const text = data?.candidates?.[0]?.content?.parts?.filter((p: any) => !p.thought).map((p: any) => p.text ?? "").join("") ?? "";
+      const inp = Number(data?.usageMetadata?.promptTokenCount) || 0, out = Number(data?.usageMetadata?.candidatesTokenCount) || 0;
       try {
-        return parseJson(text);
+        const parsed = parseJson(text);
+        meter?.push({ provider: "gemini", model, input_tokens: inp, output_tokens: out, cost: textCost(model, inp, out) });
+        return parsed;
       } catch {
         console.error("bad json", model, text.slice(0, 200));
         if (attempt < 1) continue;
@@ -199,7 +222,7 @@ async function tryGemini(model: string, system: string, prompt: string, temperat
   throw new GeminiError(502, "AI failed");
 }
 
-async function gemini(system: string, prompt: string, temperature = 0.7, maxTokens = 4096): Promise<any> {
+async function gemini(system: string, prompt: string, temperature = 0.7, maxTokens = 4096, meter?: Meter): Promise<any> {
   const models = modelOrder();
   if (!models.length) throw new GeminiError(500, "No AI key is set");
 
@@ -215,8 +238,8 @@ async function gemini(system: string, prompt: string, temperature = 0.7, maxToke
       ctrls.push(ctrl);
       running++;
       const run = c.provider === "openai"
-        ? tryOpenAI(c.model, system, prompt, temperature, maxTokens, ctrl.signal)
-        : tryGemini(c.model, system, prompt, temperature, maxTokens, ctrl.signal);
+        ? tryOpenAI(c.model, system, prompt, temperature, maxTokens, ctrl.signal, meter)
+        : tryGemini(c.model, system, prompt, temperature, maxTokens, ctrl.signal, meter);
       run
         .then((r) => { if (done) return; console.log("answered by", c.provider, c.model); finish(); resolve(r); })
         .catch((e) => {
@@ -236,7 +259,7 @@ async function gemini(system: string, prompt: string, temperature = 0.7, maxToke
 
 // ---------------------------------------------------------------------------
 // 하루 패키지 만들기
-async function makePack(b: any) {
+async function makePack(b: any, m?: Meter) {
   const level = levelOf(b.level);
   const topic = TOPICS[b.topic] ? b.topic : "me";
   const system = `You are Klaudia, a friendly English conversation teacher. ${LEARNER} Reply with JSON only.`;
@@ -266,11 +289,11 @@ Rules:
 - Every English sentence must fit the level. Korean must be natural, polite (존댓말).
 - choices are 3 different possible answers he could pick, each fitting the level.
 - Questions are about HIS life, so the answers are personal.`;
-  return await gemini(system, prompt, 0.8);
+  return await gemini(system, prompt, 0.8, 4096, m);
 }
 
 // 묻고 답하기: 대답 확인
-async function checkAnswer(b: any) {
+async function checkAnswer(b: any, m?: Meter) {
   const level = levelOf(b.level);
   const system = `You are Klaudia, a kind English teacher. ${LEARNER} Reply with JSON only.`;
   const prompt = `Klaudia asked: "${clip(b.question, 300)}"
@@ -288,11 +311,11 @@ Return JSON:
   "answer_ko": "what the learner meant, written in natural Korean in his own first-person voice (저는 ...)",
   "facts": ["short English facts about the learner's life learned from this answer, e.g. 'Has a son who lives in Busan'. Empty if none."]
 }`;
-  return await gemini(system, prompt, 0.4);
+  return await gemini(system, prompt, 0.4, 4096, m);
 }
 
 // 3분 대화: 한 턴
-async function chatTurn(b: any) {
+async function chatTurn(b: any, m?: Meter) {
   const level = levelOf(b.level);
   const topic = TOPICS[b.topic] ? b.topic : "me";
   const history = Array.isArray(b.history) ? b.history.slice(-12) : [];
@@ -314,7 +337,7 @@ Return JSON:
 {
   ${SUGG}
 }`;
-    return await gemini(system, p0, 0.7, 500);
+    return await gemini(system, p0, 0.7, 500, m);
   }
   const prompt = `Scene: ${clip(b.scene, 200)}
 Topic: ${TOPICS[topic]}
@@ -338,11 +361,11 @@ Return JSON:
   ${SUGG.replace("say next", "say to Klaudia's new line")},
   "facts": ["new short English facts about the learner from his last line, or empty"]
 }`;
-  return await gemini(system, prompt, 0.7, 1500);
+  return await gemini(system, prompt, 0.7, 1500, m);
 }
 
 // 편지 읽기 도우미
-async function readLetter(b: any) {
+async function readLetter(b: any, m?: Meter) {
   const level = levelOf(b.level);
   const system = `You help a Korean learner read a short English message from family. ${LEARNER} Reply with JSON only.`;
   const prompt = `Message from ${clip(b.from_name, 40) || "Clara"}:
@@ -358,11 +381,11 @@ Return JSON:
   "extra": ["4 extra single English words that could be useful or tempting in a reply"]
 }
 Rules: ${SAY_RULE}`;
-  return await gemini(system, prompt, 0.5);
+  return await gemini(system, prompt, 0.5, 4096, m);
 }
 
 // 답장 다듬기
-async function polishReply(b: any) {
+async function polishReply(b: any, m?: Meter) {
   const level = levelOf(b.level);
   const system = `You are Klaudia, a kind English teacher helping a learner write a reply to family. ${LEARNER} Reply with JSON only.`;
   const prompt = `The message he received:
@@ -379,7 +402,7 @@ Return JSON:
   "tips_ko": ["short Korean explanations of what was fixed and why (max 3)"],
   "better_words": [ {"en": "a nicer word or phrase he could use", "ko": "Korean"} ]
 }`;
-  return await gemini(system, prompt, 0.4);
+  return await gemini(system, prompt, 0.4, 4096, m);
 }
 
 
@@ -447,12 +470,12 @@ async function openaiSpeech(text: string, level: number): Promise<{ audio: strin
   return null;
 }
 
-async function speech(b: any) {
+async function speech(b: any, m?: Meter) {
   const text = clip(b.text, 500).trim();
   if (!text) throw new GeminiError(400, "empty text");
   const level = levelOf(b.level);
   const oa = await openaiSpeech(text, level);
-  if (oa) return oa;
+  if (oa) { m?.push({ provider: "openai", model: oa.model, units: text.length, cost: text.length * TTS_PER_CHAR }); return oa; }
 
   const key = Deno.env.get("GEMINI_API_KEY");
   if (!key) throw new GeminiError(502, "TTS failed");
@@ -479,7 +502,7 @@ async function speech(b: any) {
     if (res.ok) {
       const data = await res.json();
       const part = data?.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData?.data);
-      if (part) return { audio: part.inlineData.data, mime: part.inlineData.mimeType || "audio/L16;rate=24000", model };
+      if (part) { m?.push({ provider: "gemini", model, units: text.length, cost: 0 }); return { audio: part.inlineData.data, mime: part.inlineData.mimeType || "audio/L16;rate=24000", model }; }
       lastErr = new GeminiError(502, "no audio");
       continue;
     }
@@ -495,13 +518,16 @@ async function speech(b: any) {
 const OPENAI_STT = ["gpt-transcribe", "gpt-4o-mini-transcribe", "whisper-1"];
 const MAX_AUDIO_B64 = 2_000_000; // 약 1.5MB (16kHz 로 40초쯤)
 
-async function transcribe(b: any) {
+async function transcribe(b: any, m?: Meter) {
   const b64 = String(b.audio || "");
   if (!b64 || b64.length > MAX_AUDIO_B64) throw new GeminiError(400, "bad audio");
   let bytes: Uint8Array;
   try { bytes = fromBase64(b64); } catch { throw new GeminiError(400, "bad audio"); }
   const mime = /^audio\/[a-z0-9.+-]+$/i.test(String(b.mime || "")) ? String(b.mime) : "audio/wav";
   const ext = /wav/.test(mime) ? "wav" : /mp4|m4a|aac/.test(mime) ? "m4a" : /webm/.test(mime) ? "webm" : "wav";
+  // 메시지 쓰기에서는 한국어로 말해도 되게 언어를 정하지 않습니다.
+  const lang = b.lang === "auto" ? "" : "en";
+  const secs = ext === "wav" ? Math.max(0, (bytes.length - 44) / 32000) : bytes.length / 16000;
 
   const key = Deno.env.get("OPENAI_API_KEY");
   if (key) {
@@ -509,7 +535,7 @@ async function transcribe(b: any) {
       const form = new FormData();
       form.append("file", new Blob([bytes], { type: mime }), `speech.${ext}`);
       form.append("model", model);
-      form.append("language", "en");
+      if (lang) form.append("language", lang);
       form.append("response_format", "json");
       try {
         const t0 = Date.now();
@@ -519,6 +545,7 @@ async function transcribe(b: any) {
         console.log("stt", model, res.status, Date.now() - t0, "ms");
         if (res.ok) {
           const data = await res.json();
+          m?.push({ provider: "openai", model, units: Math.round(secs), cost: secs * (STT_PER_SEC[model] ?? 0.006 / 60) });
           return { text: clip(data?.text, 500).trim(), model };
         }
         console.error("stt error", model, res.status, (await res.text()).slice(0, 200));
@@ -535,7 +562,8 @@ async function transcribe(b: any) {
       const res = await callGemini(model, gkey, {
         contents: [{ role: "user", parts: [
           { inlineData: { mimeType: mime, data: b64 } },
-          { text: "Write down exactly the English words spoken in this audio. Reply with the words only. If nothing is said, reply with nothing." },
+          { text: lang ? "Write down exactly the English words spoken in this audio. Reply with the words only. If nothing is said, reply with nothing."
+                       : "Write down exactly the words spoken in this audio (it may be Korean or English), in the language spoken. Reply with the words only. If nothing is said, reply with nothing." },
         ] }],
         generationConfig: { temperature: 0, maxOutputTokens: 200 },
       }, 20000);
@@ -543,12 +571,83 @@ async function transcribe(b: any) {
       if (!res.ok) { console.error("stt error", model, res.status, (await res.text()).slice(0, 200)); continue; }
       const data = await res.json();
       const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("") ?? "";
+      m?.push({ provider: "gemini", model, units: Math.round(secs), cost: 0 });
       return { text: clip(text, 500).trim(), model };
     } catch (e) {
       console.error("stt fail", model, String(e).slice(0, 120));
     }
   }
   throw new GeminiError(502, "STT failed");
+}
+
+// ---------------------------------------------------------------------------
+// 메시지 쓰기 도우미: 인사 → 하고 싶은 말 → 끝인사, 모두 합쳐 2~3문장
+const COMPOSE_TOPICS: Record<string, string> = {
+  day: "ask how their day was and share one small thing about your own day",
+  weekend: "ask about their weekend plans",
+  dinner: "talk about what to eat for dinner tonight and ask what they are having",
+  kids: "ask how the children / grandchildren / nieces and nephews are doing",
+  free: "whatever the writer wants to say",
+  reply: "reply to the message they received",
+};
+const STEP_TEXT: Record<string, string> = {
+  greet: "a warm greeting line that also opens the message (e.g. 'Hi Clara! I hope you are well.')",
+  body: "the main sentence: what the writer wants to say or ask",
+  close: "a short friendly closing line (e.g. 'Talk soon!', 'Take care.')",
+};
+async function compose(b: any, m?: Meter) {
+  const writerLearner = b.writer_role !== "friend";
+  const level = levelOf(writerLearner ? b.level : b.reader_level);
+  const topic = COMPOSE_TOPICS[b.topic] ? b.topic : "free";
+  const who = `Writer: ${clip(b.from_name, 40) || "the writer"}. Reader: ${clip(b.to_name, 40) || "the reader"}.`;
+  const rule = writerLearner
+    ? `The writer is a Korean man in his 70s learning English. Every English line must be short and easy for him to read aloud. ${LEVELS[level]}`
+    : `The reader is a Korean beginner learner of English in his 70s, so every English line must be short, warm and easy to read. ${LEVELS[level]}`;
+  const draft = Array.isArray(b.draft) ? b.draft.slice(0, 4).map((x: unknown) => clip(x, 200)).join(" ") : "";
+  const replyTo = b.reply_to ? `\nThe message being replied to: """${clip(b.reply_to, 800)}"""` : "";
+  const system = `You are Klaudia, helping someone write a very short, warm message to family. ${rule} The whole message is only 2 or 3 short sentences. Reply with JSON only.`;
+  if (b.mode === "voice") {
+    const step = STEP_TEXT[b.step] ? b.step : "body";
+    const prompt = `${who}
+Topic: ${COMPOSE_TOPICS[topic]}${replyTo}
+Message so far: "${draft}"
+Now writing: ${STEP_TEXT[step]}
+The writer said (speech recognition, may be Korean or English, may have errors): "${clip(b.said, 400)}"
+
+Turn what the writer meant into ONE natural English sentence for this part of the message, keeping their meaning and voice.
+Return JSON: {"en": "...", "ko": "natural Korean meaning (polite)"}`;
+    return await gemini(system, prompt, 0.4, 400, m);
+  }
+  const prompt = `${who}
+Topic: ${COMPOSE_TOPICS[topic]}${replyTo}
+${b.notes && Array.isArray(b.notes) && b.notes.length ? "What we know about the writer:\n" + notesText(b.notes.slice(0, 10)) : ""}
+
+Suggest lines for each part of the message. Each line is ONE short sentence, written as the writer, using the reader's name naturally.
+Return JSON:
+{
+  "greet": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ],
+  "body":  [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ],
+  "close": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]
+}
+"ko" is the natural Korean meaning (polite). The three options in each part should be clearly different.`;
+  return await gemini(system, prompt, 0.8, 1200, m);
+}
+
+// 사용량 적기 (실패해도 앱에는 영향 없음)
+async function saveUsage(url: string, key: string, token: string, action: string, meter: Meter) {
+  if (!meter.length) return;
+  try {
+    const db = createClient(url, key, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${token}` } } });
+    const rows = meter.map((u) => ({
+      action, provider: u.provider, model: u.model,
+      input_tokens: u.input_tokens || 0, output_tokens: u.output_tokens || 0,
+      units: u.units || 0, cost_usd: Math.round(u.cost * 1e6) / 1e6,
+    }));
+    const { error } = await db.from("ai_usage").insert(rows);
+    if (error) console.error("usage save", error.message);
+  } catch (e) {
+    console.error("usage save", String(e).slice(0, 120));
+  }
 }
 
 // 프로젝트 키 찾기 (예전 anon 키 / 새 publishable 키 모두 지원)
@@ -588,19 +687,24 @@ Deno.serve(async (req) => {
     return json({ error: "bad json" }, 400);
   }
 
+  const meter: Meter = [];
+  const handlers: Record<string, (b: any, m: Meter) => Promise<any>> = {
+    pack: makePack, check: checkAnswer, chat: chatTurn, letter: readLetter, polish: polishReply,
+    tts: speech, stt: transcribe, compose,
+  };
   try {
-    switch (b?.action) {
-      case "pack":   return json(await makePack(b));
-      case "check":  return json(await checkAnswer(b));
-      case "chat":   return json(await chatTurn(b));
-      case "letter": return json(await readLetter(b));
-      case "polish": return json(await polishReply(b));
-      case "tts":    return json(await speech(b));
-      case "stt":    return json(await transcribe(b));
-      case "ping":   return json({ ok: true });
-      default:       return json({ error: "unknown action" }, 400);
-    }
+    if (b?.action === "ping") return json({ ok: true });
+    const fn = handlers[b?.action];
+    if (!fn) return json({ error: "unknown action" }, 400);
+    const out = await fn(b, meter);
+    const done = saveUsage(url, key, token, b.action, meter);
+    // 응답을 먼저 보내고 기록은 뒤에서
+    // deno-lint-ignore no-explicit-any
+    const rt = (globalThis as any).EdgeRuntime;
+    if (rt && typeof rt.waitUntil === "function") rt.waitUntil(done); else await done;
+    return json(out);
   } catch (e) {
+    if (meter.length) await saveUsage(url, key, token, b.action, meter);
     if (e instanceof GeminiError) {
       console.error("gemini", e.status, e.message);
       return json({ error: e.status === 429 ? "busy" : "ai_error" }, e.status === 429 ? 429 : 502);

@@ -153,7 +153,7 @@ async function letterStep(S) {
   const L = S.letter;
   let fromName = '가족';
   try {
-    const members = await api.familyMembers(state.profile.family);
+    const members = await api.myContacts();
     fromName = (members.find((m) => m.id === L.from_id) || {}).name || '가족';
   } catch (e) { /* 무시 */ }
   loading(`${fromName}님의 편지를 읽기 쉽게 준비하고 있어요…`);
@@ -269,7 +269,7 @@ async function letterStep(S) {
     on('send', async () => {
       $('send').disabled = true;
       try {
-        await api.sendLetter({ family: state.profile.family, to_id: L.from_id, body: r.fixed_en, reply_to: L.id });
+        await api.sendLetter({ to_id: L.from_id, body: r.fixed_en, reply_to: L.id });
         await api.markLetter(L.id);
         S.score.letter = true;
         save(S, { kind: 'letter', prompt_en: L.body, answer_en: draft, better_en: r.fixed_en, answer_ko: r.fixed_ko });

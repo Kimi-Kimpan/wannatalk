@@ -232,9 +232,33 @@ export async function countPending(uid) {
 export async function markLetter(id) {
   await sb.from('letters').update({ handled_at: new Date().toISOString() }).eq('id', id);
 }
-export async function sendLetter({ family, to_id, body, reply_to = null }) {
+export async function sendLetter({ family = null, to_id, body, reply_to = null }) {
   const { error } = await sb.from('letters').insert({ family, to_id, body, reply_to });
   if (error) throw error;
+}
+
+// 연락처 (코드로 추가) ---------------------------------------------------------------
+export async function myCode() {
+  const { data, error } = await sb.rpc('my_code');
+  if (error) throw error;
+  return data;
+}
+export async function myContacts() {
+  const { data, error } = await sb.rpc('my_contacts');
+  if (error) throw error;
+  return data || [];
+}
+// 찾으면 {id, name, role}, 없으면 null. 너무 많이 틀리면 Error('too_many_tries')
+export async function addContact(code) {
+  const { data, error } = await sb.rpc('add_contact', { c: String(code || '').trim().toUpperCase() });
+  if (error) throw new Error(/too_many_tries/.test(error.message || '') ? 'too_many_tries' : 'error');
+  return Array.isArray(data) && data[0] ? data[0] : null;
+}
+// 나와 주고받은 편지 (최근 것부터)
+export async function myLetters(uid, limit = 40) {
+  const { data, error } = await sb.from('letters').select('*').or(`from_id.eq.${uid},to_id.eq.${uid}`).order('created_at', { ascending: false }).limit(limit);
+  if (error) throw error;
+  return data || [];
 }
 export async function familyLetters(limit = 30) {
   const { data, error } = await sb.from('letters').select('*').order('created_at', { ascending: false }).limit(limit);

@@ -337,7 +337,7 @@ function wavBase64(samples, rate) {
 }
 
 // 마이크로 녹음 → 말이 끝나면(조용해지면) 저절로 멈춤 → 서버가 받아 적기
-function recordAndTranscribe({ silenceMs = 1800, maxMs = 25000, waitMs = 9000, onLevel = null, onState = null } = {}) {
+function recordAndTranscribe({ silenceMs = 1800, maxMs = 25000, waitMs = 9000, onLevel = null, onState = null, lang = 'en' } = {}) {
   return new Promise((resolve, reject) => {
     let stream = null, source = null, proc = null, sink = null, cap = null;
     let ended = false;
@@ -384,7 +384,7 @@ function recordAndTranscribe({ silenceMs = 1800, maxMs = 25000, waitMs = 9000, o
         const from = started ? Math.max(0, firstVoice - Math.round(rate * 0.35)) : 0;
         const to = started ? Math.min(total, lastVoiceEnd + Math.round(rate * 0.45)) : total;
         const cut = resample(all.subarray(from, to), rate);
-        const r = await ai('stt', { audio: wavBase64(cut.data, cut.rate), mime: 'audio/wav' }, 30000);
+        const r = await ai('stt', { audio: wavBase64(cut.data, cut.rate), mime: 'audio/wav', lang: lang || 'en' }, 30000);
         serverFails = 0;
         const text = String((r && r.text) || '').replace(/\s+/g, ' ').trim();
         if (!text) return reject('no-speech');
@@ -454,13 +454,13 @@ function recordAndTranscribe({ silenceMs = 1800, maxMs = 25000, waitMs = 9000, o
 
 // 브라우저 내장 음성 인식 (녹음이 안 되는 기기용)
 let srCurrent = null;
-function listenWebSpeech({ silenceMs = 1800, maxMs = 25000 } = {}) {
+function listenWebSpeech({ silenceMs = 1800, maxMs = 25000, lang = 'en' } = {}) {
   return new Promise((resolve, reject) => {
     let done = false, cancelled = false;
     let finals = [], lastAlts = [], interim = '';
     let silence = null;
     const r = new SR();
-    r.lang = 'en-US';
+    r.lang = lang === 'auto' ? 'ko-KR' : 'en-US';
     r.interimResults = true;
     r.continuous = false;
     r.maxAlternatives = 3;

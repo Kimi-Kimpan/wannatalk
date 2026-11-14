@@ -140,6 +140,41 @@ async function loadUsers() {
   users = data || [];
   render();
   loadSignup();
+  loadUsage();
+}
+
+// AI 사용량 (이번 달, 추정 금액) ---------------------------------------------------------
+const ACTION_KO = { pack: '수업 만들기', check: '대답 확인', chat: '3분 대화', letter: '편지 읽기', polish: '답장 다듬기', tts: '목소리', stt: '말 받아 적기', compose: '메시지 쓰기' };
+let usageRange = 'month';
+async function loadUsage() {
+  const box = $('usage');
+  if (!box) return;
+  const now = new Date();
+  const since = usageRange === 'month' ? new Date(now.getFullYear(), now.getMonth(), 1) : new Date(now.getTime() - 86400000);
+  const { data, error } = await sb.rpc('admin_usage', { since: since.toISOString() });
+  if (error) { box.innerHTML = '<div class="panel-head"><h2>AI 사용량</h2></div><p class="empty">불러오지 못했어요 (004_contacts_usage.sql 실행 필요)</p>'; return; }
+  const rows = data || [];
+  const total = rows.reduce((a, r) => a + Number(r.cost_usd || 0), 0);
+  const calls = rows.reduce((a, r) => a + Number(r.calls || 0), 0);
+  const byUser = {}, byAction = {};
+  rows.forEach((r) => {
+    const k = r.name || r.email || '(알 수 없음)';
+    byUser[k] = (byUser[k] || 0) + Number(r.cost_usd || 0);
+    byAction[r.action] = (byAction[r.action] || { cost: 0, calls: 0 });
+    byAction[r.action].cost += Number(r.cost_usd || 0);
+    byAction[r.action].calls += Number(r.calls || 0);
+  });
+  const usd = (x) => '$' + (x < 0.01 && x > 0 ? x.toFixed(4) : x.toFixed(2));
+  const pct = (x) => (total > 0 ? Math.round((x / total) * 100) + '%' : '-');
+  box.innerHTML = `<div class="panel-head"><h2>AI 사용량 <span class="muted" style="font-size:14px">(요금표로 계산한 추정치)</span></h2>
+      <div class="row"><button class="btn ${usageRange === 'day' ? 'primary' : ''}" data-r="day" type="button">최근 24시간</button><button class="btn ${usageRange === 'month' ? 'primary' : ''}" data-r="month" type="button">이번 달</button></div></div>
+    <div class="usage-grid">
+      <div><div class="label">합계</div><div class="value">${usd(total)}</div><div class="sub">호출 ${calls}번</div></div>
+      <div><div class="label">사람별</div>${Object.entries(byUser).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="kv"><span>${esc(k)}</span><b>${usd(v)} · ${pct(v)}</b></div>`).join('') || '<p class="muted">아직 없어요</p>'}</div>
+      <div><div class="label">기능별</div>${Object.entries(byAction).sort((a, b) => b[1].cost - a[1].cost).map(([k, v]) => `<div class="kv"><span>${esc(ACTION_KO[k] || k)}</span><b>${usd(v.cost)} · ${v.calls}번</b></div>`).join('') || '<p class="muted">아직 없어요</p>'}</div>
+    </div>
+    <p class="muted" style="padding:0 16px 14px;font-size:13px">정확한 청구 금액은 OpenAI 사이트(platform.openai.com → Usage)에서 확인하세요. Gemini 는 무료 키라 $0 으로 셉니다.</p>`;
+  box.querySelectorAll('button[data-r]').forEach((b) => b.addEventListener('click', () => { usageRange = b.dataset.r; loadUsage(); }));
 }
 
 // 가입 인원 제한 ---------------------------------------------------------------------
@@ -192,6 +227,8 @@ function render() {
       <div class="tile" id="signup"><div class="label">가입 제한</div><div class="sub">불러오는 중…</div></div>
       <div class="tile"><div class="label">자서전 기록</div><div class="value">${entries}</div><div class="sub">모인 대답 수</div></div>
     </div>
+
+    <section class="panel" id="usage"><div class="panel-head"><h2>AI 사용량</h2></div><p class="empty">불러오는 중…</p></section>
 
     <section class="panel">
       <div class="panel-head"><h2>사용자</h2><span class="muted">줄을 누르면 자세히 보여요</span></div>

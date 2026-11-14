@@ -104,3 +104,10 @@ tbody tr:last-child td { border-bottom: 0; }
 .msg { min-height: 22px; font-size: 14px; color: var(--bad); }
 @media (max-width: 640px) { .tile .value { font-size: 24px; } }
 .bad-text { color: var(--bad, #B3261E); }
+#usage { margin-bottom: 16px; }
+.usage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; padding: 14px 16px; }
+.usage-grid .label { font-size: 13px; color: var(--ink-soft); margin-bottom: 4px; }
+.usage-grid .value { font-family: var(--font-en); font-size: 30px; font-weight: 700; }
+.usage-grid .sub { font-size: 13px; color: var(--ink-soft); }
+.kv { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.empty { padding: 14px 16px; }

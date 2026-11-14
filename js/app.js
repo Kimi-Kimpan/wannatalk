@@ -5,6 +5,7 @@ import { boot } from './screens.js';
 import './placement.js';
 import './learn.js';
 import './friend.js';
+import './message.js';
 
 // 홈 화면 설치 안내를 위해 저장
 window.addEventListener('beforeinstallprompt', (e) => {

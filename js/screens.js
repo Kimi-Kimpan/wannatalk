@@ -243,10 +243,8 @@ register('setup', () => {
     if (!name) { $('msg').textContent = '이름을 적어 주세요. · Please enter your name.'; $('name').focus(); return; }
     try {
       state.profile = await api.updateProfile(state.user.id, { name: name.slice(0, 40), role });
-      if (role === 'learner') {
-        await api.ensureFamilyCode();
-        state.profile = await api.getProfile(state.user.id);
-      }
+      try { await api.myCode(); } catch (e2) { /* 나중에 다시 */ }
+      state.profile = await api.getProfile(state.user.id);
       boot();
     } catch (e) {
       $('msg').textContent = '저장하지 못했어요. 다시 눌러 주세요.';
@@ -347,7 +345,7 @@ register('home', async () => {
 
   try {
     const [letter, n, members] = await Promise.all([
-      api.pendingLetter(state.user.id), api.countPending(state.user.id), api.familyMembers(p.family),
+      api.pendingLetter(state.user.id), api.countPending(state.user.id), api.myContacts(),
     ]);
     const box = $('msgCard');
     if (!box) return;
@@ -357,12 +355,15 @@ register('home', async () => {
       box.innerHTML = `<p class="label">✉️ 오늘 온 편지 ${n > 1 ? `<span class="count-pill">${n}통</span>` : ''}</p>
         <p class="from">${esc(from)}님이 보냈어요</p>
         <p class="snippet" lang="en">“${esc(letter.body.length > 90 ? letter.body.slice(0, 90) + '…' : letter.body)}”</p>
-        <p class="muted">레슨 처음에 함께 읽고 답장해요.</p>`;
+        <p class="muted">레슨 처음에 함께 읽고 답장해요.</p>
+        <button class="big plain" id="writeMsg" type="button">✉️ 메시지 보내기</button>`;
       const li = document.querySelector('#steps li[data-step="letter"]');
       if (li && !doneToday && !resuming) li.hidden = false;
     } else {
-      box.innerHTML = `<p class="label">✉️ 오늘 온 편지</p><p class="muted">아직 온 편지가 없어요.</p>`;
+      box.innerHTML = `<p class="label">✉️ 오늘 온 편지</p><p class="muted">아직 온 편지가 없어요.</p>
+        <button class="big plain" id="writeMsg" type="button">✉️ 메시지 보내기</button>`;
     }
+    on('writeMsg', () => go('message'));
   } catch (e) {
     if ($('msgCard')) $('msgCard').innerHTML = '<p class="label">✉️ 오늘 온 편지</p><p class="muted">편지를 불러오지 못했어요.</p>';
   }
@@ -388,9 +389,9 @@ register('settings', async () => {
     </div>
 
     <div class="panel">
-      <h2>가족 번호</h2>
-      <p class="family-code">${esc(p.family || '-')}</p>
-      <p class="muted">클라라에게 이 번호를 알려 주면 편지를 주고받을 수 있어요.</p>
+      <h2>내 코드</h2>
+      <p class="family-code" id="myCode">${esc(p.code || p.family || '…')}</p>
+      <p class="muted">가족에게 이 코드를 알려 주면 서로 메시지를 주고받을 수 있어요.</p>
     </div>
 
     <div class="panel">
@@ -414,6 +415,7 @@ register('settings', async () => {
   </section>`);
 
   on('back', () => go('home'));
+  if (!p.code) api.myCode().then((c) => { p.code = c; if ($('myCode')) $('myCode').textContent = c; }).catch(() => {});
   async function setLevel(lv) {
     try { state.profile = await api.updateProfile(state.user.id, { level: lv }); go('settings'); } catch (e) { /* 무시 */ }
   }
@@ -446,7 +448,7 @@ register('settings', async () => {
   api.isAdmin().then((yes) => { if (yes) adminBox(true); }).catch(() => {});
 
   try {
-    const [letters, members] = await Promise.all([api.familyLetters(20), api.familyMembers(p.family)]);
+    const [letters, members] = await Promise.all([api.myLetters(state.user.id, 20), api.myContacts()]);
     const names = Object.fromEntries(members.map((m) => [m.id, m.name]));
     const box = $('letters');
     if (!box) return;
