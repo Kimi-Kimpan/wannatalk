@@ -572,3 +572,4 @@ input.code { font-family: var(--font-en); font-size: 34px; letter-spacing: 8px; 
 /* 내가 한 말이 길면 4줄까지만 보여서 고친 문장이 항상 보이게 */
 .compare .mine-line { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 @media (max-height: 700px) { .points .point-btn { min-height: 56px; font-size: 19px; } }
+.link-error { border-color: var(--bad); background: var(--bad-bg); } .link-error .big { width: 100%; margin-top: 6px; }

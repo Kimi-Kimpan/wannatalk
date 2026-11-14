@@ -94,7 +94,7 @@ function loginView(msg = '') {
 async function start() {
   if (!configured) { root.innerHTML = '<p>js/config.js 설정이 필요해요.</p>'; return; }
   const { data } = await sb.auth.getSession();
-  if (!data.session) return loginView();
+  if (!data.session) return loginView(window.__wtAuthErr ? '이 로그인 링크는 이미 쓰였거나 만료됐어요. 가장 최근에 받은 메일의 링크만 돼요. 메일을 다시 받아 주세요.' : '');
   if (freshLogin && inIOSBrowser() && !window.__wtHandoffShown) return handoffView();
   await afterLogin();
 }

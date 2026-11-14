@@ -15,7 +15,7 @@
 <main id="root" class="wrap">
   <p class="muted">불러오는 중…</p>
 </main>
-<script>window.__wtFresh=/(access_token|token_hash|[?&]code)=/.test(location.hash+location.search);</script>
+<script>window.__wtFresh=/(access_token|token_hash|[?&]code)=/.test(location.hash+location.search);window.__wtAuthErr=(/error_code=([a-z_]+)/.exec(location.hash+location.search)||[])[1]||"";if(window.__wtAuthErr)history.replaceState(null,"",location.pathname);</script>
 <script type="module" src="js/admin.js"></script>
 </body>
 </html>

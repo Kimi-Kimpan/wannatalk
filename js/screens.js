@@ -11,7 +11,14 @@ register('login', () => {
   try { email = localStorage.getItem('wt-email') || ''; } catch (e) { /* 무시 */ }
 
   function landing() {
+    const linkErr = window.__wtAuthErr;
+    window.__wtAuthErr = '';
     mount(`<section class="screen landing">
+      ${linkErr ? `<div class="panel link-error" role="alert">
+        <p class="lead"><b>이 로그인 링크는 쓸 수 없어요.</b></p>
+        <p>이미 한 번 쓴 링크이거나, 시간이 지났거나, 새 메일을 받아서 예전 링크가 된 경우예요. <b>가장 최근에 받은 메일</b>의 링크만 돼요.</p>
+        <button class="big primary" id="resend" type="button">로그인 메일 다시 받기</button>
+      </div>` : ''}
       <div class="bar">
         <div class="brand">WannaTalk</div>
         <button class="ghost" id="toAdmin" type="button">관리자</button>
@@ -35,6 +42,7 @@ register('login', () => {
     </section>`);
     on('pasteLogin', () => pasteLogin(false));
     on('start', () => { admin = false; stepEmail(); });
+    on('resend', () => { admin = false; stepEmail(); });
     on('toAdmin', () => { admin = true; stepEmail(); });
     on('toAdmin2', () => { admin = true; stepEmail(); });
   }
