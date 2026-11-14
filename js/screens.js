@@ -126,7 +126,7 @@ register('login', () => {
     });
     async function loginWith(link) {
       say('확인하는 중이에요…');
-      try { done(await api.signInWithLink(link)); }
+      try { done(await api.signInWithLink(link, admin ? api.adminClient() : api.sb)); }
       catch (err) {
         say(err.message === 'no_token'
           ? '로그인 링크가 아닌 것 같아요. 메일 속 Sign in 을 길게 눌러 "링크 복사"를 골라 주세요.'
@@ -357,9 +357,10 @@ register('settings', async () => {
       <div id="letters" class="letters"><p class="muted">불러오는 중…</p></div>
     </div>
 
+    <div id="adminBox"></div>
+
     <div class="panel">
       <p class="muted">${esc(state.user.email || '')}</p>
-      <div id="adminLink"></div>
       <button class="plain mid" id="logout" type="button">로그아웃</button>
     </div>
   </section>`);
@@ -377,9 +378,24 @@ register('settings', async () => {
     go('settings');
   });
   on('logout', async () => { await api.signOut(); state.user = null; state.profile = null; go('login'); });
-  api.isAdmin().then((yes) => {
-    if (yes && $('adminLink')) $('adminLink').innerHTML = '<a class="big plain admin-link" href="admin.html">관리자 화면 열기</a>';
-  }).catch(() => {});
+  // 관리자: 한 번 연결해 두면 학습자로 로그인한 채로 바로 전환
+  function adminBox(meAdmin) {
+    const box = $('adminBox');
+    if (!box) return;
+    if (meAdmin || api.adminConnected()) {
+      box.innerHTML = `<div class="panel admin-panel">
+        <h2>관리자</h2>
+        <p class="muted">${meAdmin ? '지금 계정이 관리자 계정이에요.' : '관리자 계정이 연결돼 있어요. 학습자 로그인은 그대로 둔 채 오갈 수 있어요.'}</p>
+        <a class="big primary admin-link" href="admin.html">관리자 화면으로 전환</a>
+        ${meAdmin ? '' : '<button class="plain mid" id="unlinkAdmin" type="button">관리자 계정 연결 끊기</button>'}
+      </div>`;
+      on('unlinkAdmin', () => { api.disconnectAdmin(); adminBox(false); });
+    } else {
+      box.innerHTML = '<a class="link-btn" href="admin.html">관리자 계정 연결하기</a>';
+    }
+  }
+  adminBox(false);
+  api.isAdmin().then((yes) => { if (yes) adminBox(true); }).catch(() => {});
 
   try {
     const [letters, members] = await Promise.all([api.familyLetters(20), api.familyMembers(p.family)]);

@@ -1,4 +1,5 @@
 /* WannaTalk — 큰 글씨, 큰 버튼, 한 화면에 한 가지 일.
+[hidden] { display: none !important; }
    배치: 가운데 한 줄 기둥. 위에는 지금 할 일, 아래에는 넘기는 버튼. */
 :root {
   --paper: #F3F6FA;
@@ -423,3 +424,71 @@ input.code { font-family: var(--font-en); font-size: 34px; letter-spacing: 8px; 
 .sugg-dots { justify-content: center; align-items: center; margin-top: 2px; }
 .sugg-dots small { margin-left: 8px; font-size: 15px; color: var(--ink-soft); font-family: var(--font-en); }
 .say-bubble, #bubble { cursor: pointer; }
+
+/* ---- 스크롤 없는 화면: 한 화면에 다 들어가게 ---- */
+.screen.fit { height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.bottom { margin-top: auto; }
+.screen.fit.qa #area { flex: 1; min-height: 0; gap: 12px; }
+.screen.fit.qa .emma-row .avatar { width: 72px; height: 72px; }
+.screen.fit.qa .bubble .en { font-size: 25px; }
+.screen.fit.qa .again { margin-left: 86px; }
+.screen.fit.qa .mic { min-height: 88px; }
+.screen.fit.qa .hint { font-size: 19px; line-height: 1.4; }
+.screen.fit .feedback { padding: 14px 16px; gap: 6px; }
+.screen.fit .feedback > .en { font-size: 23px; }
+.screen.fit .better { padding: 12px 14px; }
+.screen.fit .better .en { font-size: 23px; }
+.center-note { text-align: center; font-size: 17px; }
+.admin-link.primary { color: var(--primary-ink); text-align: center; }
+.admin-panel .big { min-height: 64px; font-size: 22px; }
+
+/* 예시 카드 화살표: 상자 없이 화살표만 */
+.sugg-arrow { width: 40px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; padding: 0; }
+.sugg-arrow svg { width: 32px; height: 32px; }
+
+/* 3분 대화 */
+.screen.fit.talk2 { gap: 10px; }
+.screen.fit.talk2 .avatar.xl { width: 88px; height: 88px; }
+.screen.fit.talk2 #lower { margin-top: auto; }
+.screen.fit.talk2 .dock { position: static; margin-top: 0; box-shadow: none; border-top: 1px solid var(--line); padding-top: 8px; }
+.screen.fit.talk2 .say-bubble { min-height: 0; padding: 12px 14px; }
+.screen.fit.talk2 .say-bubble .en { font-size: 23px; }
+/* 대답 확인 중에는 클라우디아를 작게 */
+.talk2.fb .stage .avatar, .talk2.fb .slide-dots, .talk2.fb .nav-arrow, .talk2.fb .say-bubble::after, .talk2.fb .say-bubble .ko, .talk2.fb .say-bubble .mine { display: none; }
+.talk2.fb .say-bubble .en { font-size: 20px; }
+.talk2.fb #lower { margin-top: 0; flex: 1; }
+.talk2.fb #lower .bottom { margin-top: auto; }
+
+/* 키가 작은 휴대폰 (아이폰 SE 등) */
+@media (max-height: 720px) {
+  .screen.fit { gap: 8px; }
+  .screen.fit.qa .emma-row .avatar { width: 56px; height: 56px; }
+  .screen.fit.qa .again { margin-left: 70px; min-height: 44px; }
+  .screen.fit.qa .bubble .en, .screen.fit.talk2 .say-bubble .en { font-size: 21px; }
+  .screen.fit.qa .mic { min-height: 70px; font-size: 24px; }
+  .screen.fit.talk2 .avatar.xl { width: 64px; height: 64px; }
+  .sugg-row .sugg-main { min-height: 0; padding: 8px 12px; }
+  .sugg-main .en { font-size: 19px; }
+  .sugg-listen { display: none; }
+  .sugg-row .sugg-send { min-height: 48px; font-size: 18px; }
+  .mic-round { width: 84px; height: 84px; }
+  #nextQ, #nextTurn { min-height: 72px; }
+}
+.screen.fit.talk2 { gap: 8px; }
+.screen.fit.talk2 .timer2 { margin-top: -2px; font-size: 18px; }
+.screen.fit.talk2 .avatar.xl { width: 76px; height: 76px; }
+.screen.fit.talk2 .stage { gap: 4px; }
+.screen.fit.talk2 .slide-dots { margin-top: 2px; }
+.screen.fit.talk2 .mic-round { width: 92px; height: 92px; }
+.screen.fit.talk2 .dock .hint { min-height: 0; margin-bottom: 0; font-size: 19px; }
+.screen.fit.talk2 .talk-bottom { margin-top: 0; }
+.screen.fit .sugg-title { font-size: 17px; }
+@media (max-height: 720px) {
+  .screen.fit.talk2 .avatar.xl { width: 56px; height: 56px; }
+  .screen.fit.talk2 .say-bubble { padding: 8px 12px; }
+  .screen.fit.talk2 .say-bubble .ko { font-size: 16px; }
+  .screen.fit.talk2 .mic-round { width: 80px; height: 80px; font-size: 16px; }
+  .screen.fit.talk2 .mic-round svg { width: 30px; height: 30px; }
+  .screen.fit .sugg-title .muted { display: none; }
+  .screen.fit.talk2 .bar .ghost, .screen.fit.qa .bar .ghost { min-height: 44px; }
+}

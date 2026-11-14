@@ -4,11 +4,32 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 export const configured = /^https:\/\/.+\.supabase\.co\/?$/.test(SUPABASE_URL) && !SUPABASE_ANON_KEY.startsWith('YOUR');
 
+// 관리자 화면은 로그인을 따로 저장합니다. 그래서 학습자로 로그인한 채로 관리자 화면을 오갈 수 있어요.
+export const ADMIN_STORAGE_KEY = 'wt-admin-auth';
+const onAdminPage = /admin\.html$/.test(location.pathname);
 export const sb = configured
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, ...(onAdminPage ? { storageKey: ADMIN_STORAGE_KEY } : {}) },
     })
   : null;
+// 앱 화면에서 관리자 로그인을 받을 때만 쓰는 두 번째 연결
+let adminSb = null;
+export function adminClient() {
+  if (onAdminPage) return sb;
+  if (!adminSb && configured) {
+    adminSb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: true, autoRefreshToken: false, detectSessionInUrl: false, storageKey: ADMIN_STORAGE_KEY },
+    });
+  }
+  return adminSb;
+}
+// 관리자 계정이 이 기기에 연결돼 있는지
+export function adminConnected() {
+  try { return !!localStorage.getItem(ADMIN_STORAGE_KEY); } catch (e) { return false; }
+}
+export function disconnectAdmin() {
+  try { localStorage.removeItem(ADMIN_STORAGE_KEY); } catch (e) { /* 무시 */ }
+}
 
 export class AIError extends Error {
   constructor(code) { super(code); this.code = code; }
@@ -60,13 +81,13 @@ export async function verifyCode(email, token) {
   return data.session;
 }
 // 메일 속 로그인 링크를 붙여넣어 로그인 (아이폰 홈 화면 앱용)
-export async function signInWithLink(raw) {
+export async function signInWithLink(raw, client = sb) {
   let text = String(raw || '').trim();
   for (let i = 0; i < 3; i++) { try { const d = decodeURIComponent(text); if (d === text) break; text = d; } catch (e) { break; } }
   const access = /[#&?]access_token=([^&#\s]+)/.exec(text);
   const refresh = /[#&?]refresh_token=([^&#\s]+)/.exec(text);
   if (access && refresh) {
-    const { data, error } = await sb.auth.setSession({ access_token: access[1], refresh_token: refresh[1] });
+    const { data, error } = await client.auth.setSession({ access_token: access[1], refresh_token: refresh[1] });
     if (error) throw error;
     return data.session;
   }
@@ -76,7 +97,7 @@ export async function signInWithLink(raw) {
   const types = [...new Set([typeM ? typeM[1] : 'magiclink', 'magiclink', 'email', 'signup'])];
   let lastErr = null;
   for (const type of types) {
-    const { data, error } = await sb.auth.verifyOtp({ token_hash: m[1], type });
+    const { data, error } = await client.auth.verifyOtp({ token_hash: m[1], type });
     if (!error && data && data.session) return data.session;
     lastErr = error;
   }
@@ -90,7 +111,7 @@ export async function currentUser() {
 export async function signOut() {
   seenFacts.clear();
   factsLoaded = false;
-  await sb.auth.signOut();
+  await sb.auth.signOut({ scope: 'local' });
 }
 
 // 프로필 -------------------------------------------------------------------------

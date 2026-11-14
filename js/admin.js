@@ -1,5 +1,5 @@
 // WannaTalk 관리자 화면
-import { sb, configured } from './api.js';
+import { sb, configured, signInWithLink } from './api.js';
 import { TOPICS, LEVEL_NAMES } from './content.js';
 import { TOTAL_DAYS } from './config.js';
 
@@ -51,7 +51,21 @@ function loginView(msg = '') {
       <button class="btn primary" type="submit">로그인 메일 받기</button>
       <p class="msg" id="msg" role="alert">${esc(msg)}</p>
     </form>
+    <form id="lf" class="login" novalidate>
+      <label class="muted" for="link" style="font-size:14px">휴대폰 앱에서는: 메일 속 Sign in 링크를 길게 눌러 복사한 뒤 여기에 붙여넣기</label>
+      <input id="link" type="url" inputmode="url" autocomplete="off" placeholder="https://…" aria-label="로그인 링크">
+      <button class="btn" type="submit">링크로 로그인</button>
+    </form>
+    <a class="btn" href="./" style="align-self:center">앱으로 돌아가기</a>
   </div>`;
+  $('lf').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const v = $('link').value.trim();
+    if (!v) return;
+    $('msg').textContent = '확인하는 중…';
+    try { await signInWithLink(v); start(); }
+    catch (err) { $('msg').textContent = '이 링크는 이미 쓰였거나 만료됐어요. 메일을 다시 받아 주세요.'; }
+  });
   $('f').addEventListener('submit', async (e) => {
     e.preventDefault();
     const email = $('email').value.trim().toLowerCase();
@@ -74,7 +88,7 @@ async function start() {
     root.innerHTML = `<div class="center"><h1>관리자 계정이 아니에요</h1>
       <p class="muted">${esc(data.session.user.email)} 으로 로그인되어 있어요.</p>
       <button class="btn" id="out" type="button">로그아웃</button></div>`;
-    $('out').addEventListener('click', async () => { await sb.auth.signOut(); loginView(); });
+    $('out').addEventListener('click', async () => { await sb.auth.signOut({ scope: 'local' }); loginView(); });
     return;
   }
   await loadUsers();
@@ -154,7 +168,7 @@ function render() {
     <section id="detail"></section>`;
 
   $('refresh').addEventListener('click', loadUsers);
-  $('out').addEventListener('click', async () => { await sb.auth.signOut(); loginView(); });
+  $('out').addEventListener('click', async () => { await sb.auth.signOut({ scope: 'local' }); loginView(); });
   root.querySelectorAll('tbody tr[data-id]').forEach((tr) => tr.addEventListener('click', () => openUser(tr.dataset.id)));
   if (selected) openUser(selected);
 }

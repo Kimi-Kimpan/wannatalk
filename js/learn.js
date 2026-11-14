@@ -1,5 +1,5 @@
 // 하루 패키지: 편지 → 문장 카드 → 낱말 10개 → 묻고 답하기 → 3분 대화
-import { state, register, go, mount, on, $, esc, topBar, shuffle, today, loading, errorScreen, avatar, tileBuilder, toTiles, ICON, spotlight, clearSpotlight, hear, celebrate } from './ui.js';
+import { state, register, go, mount, on, $, esc, topBar, shuffle, today, loading, errorScreen, avatar, tileBuilder, toTiles, ICON, spotlight, clearSpotlight, hear, celebrate, carousel } from './ui.js';
 import { speak, prefetch, setVoiceLevel, cancelListening, canListen, bestSimilarity, sameSentence } from './speech.js';
 import { TOPICS, topicForDay, cycleForDay, SPEECH_RATE } from './content.js';
 import { TALK_SECONDS } from './config.js';
@@ -447,11 +447,11 @@ function qaStep(S) {
   function yourTurn() {
     if (!$('area') || $('feedback')) return;
     if (canListen) {
-      $('hint').textContent = '이제 말씀하실 차례예요. 마이크를 누르고 영어로 대답해 주세요.';
-      spotlight($('mic'), $('hint'), $('again'), document.querySelector('#area .or'), document.querySelector('#area .choices'));
+      $('hint').innerHTML = '이제 말씀하실 차례예요.<br>마이크를 누르거나, 아래에서 골라 주세요.';
+      spotlight($('mic'), $('hint'), $('again'), $('qaChoices'));
     } else {
       $('hint').textContent = '아래에서 대답을 고르거나 영어로 적어 주세요.';
-      spotlight($('area'));
+      spotlight($('area'), $('again'));
     }
   }
 
@@ -459,7 +459,7 @@ function qaStep(S) {
     if (k >= qs.length) return nextStep(S);
     const q = qs[k];
     mark(S, k);
-    mount(`<section class="screen scroll">
+    mount(`<section class="screen fit qa">
       ${header(S, k / qs.length)}
       <div class="emma-row">
         ${avatar()}
@@ -472,8 +472,7 @@ function qaStep(S) {
       <div id="area">
         ${canListen ? `<button class="mic" id="mic" type="button">${ICON.mic} 눌러서 대답하기</button>` : ''}
         <p class="hint" id="hint" aria-live="polite">클라우디아가 묻고 있어요…</p>
-        <p class="or">또는 아래에서 골라도 돼요</p>
-        <div class="choices">${q.choices.map((c, j) => `<button class="choice text" type="button" data-j="${j}"><span lang="en">${esc(c.en)}</span><small>${esc(c.ko)}</small></button>`).join('')}</div>
+        <div class="sugg-list bottom" id="qaChoices"></div>
         ${canListen ? '' : `<form id="typed" class="typed"><input id="typedIn" type="text" autocomplete="off" placeholder="영어로 적어도 돼요" aria-label="영어로 적기"><button class="primary" type="submit">보내기</button></form>`}
       </div>
     </section>`);
@@ -485,7 +484,11 @@ function qaStep(S) {
     setTimeout(() => { if ($('again')) play(); }, 350);
     if (qs[k + 1]) prefetch(qs[k + 1].en);
     else if (S.c.talk && S.c.talk.opener_en) prefetch(S.c.talk.opener_en);
-    document.querySelectorAll('.choice').forEach((b) => b.addEventListener('click', () => answered(q, q.choices[Number(b.dataset.j)].en, 'choice', q.choices[Number(b.dataset.j)].ko)));
+    carousel($('qaChoices'), q.choices, {
+      action: '이 대답 고르기',
+      onListen: (c) => { clearSpotlight(); speak(c.en, { rate: S.rate }); },
+      onPick: (c) => answered(q, c.en, 'choice', c.ko),
+    });
     on('mic', async () => {
       const alts = await hear($('mic'), $('hint'), { listening: '듣고 있어요… 말이 끝나면 저절로 넘어가요' });
       if (alts && alts[0] && $('area') && !$('feedback')) answered(q, alts[0], 'voice');
@@ -500,8 +503,7 @@ function qaStep(S) {
 
   async function answered(q, text, how, ko = '') {
     clearSpotlight();
-    $('area').innerHTML = `<div class="msg-me"><span class="who">내가 한 말</span><span lang="en">${esc(text)}</span></div>
-      <p class="hint">클라우디아가 듣고 있어요…</p>`;
+    $('area').innerHTML = `<div class="feedback"><p class="label">내가 한 말</p><p class="en" lang="en">${esc(text)}</p><p class="muted">클라우디아가 듣고 있어요…</p></div>`;
     let r;
     if (how === 'choice') {
       const c = CHEERS[Math.floor(Math.random() * CHEERS.length)];
@@ -535,10 +537,8 @@ function qaStep(S) {
           </div>` : '<p class="praise">👍 잘 말했어요!</p>'}
         ${r.tip_ko ? `<p class="tip">💡 ${esc(r.tip_ko)}</p>` : ''}
       </div>
-      <button class="big primary" id="nextQ" type="button">다음</button>`;
-    const ag = $('again');
-    if (ag) { const fresh = ag.cloneNode(true); ag.replaceWith(fresh); }
-    on('again', () => emma(r.reply_en, S));
+      <button class="big primary bottom" id="nextQ" type="button">다음</button>`;
+    if ($('again')) $('again').hidden = true;
     on('hearBetter', () => emma(r.better_en, S));
     on('nextQ', () => { k++; ask(); });
     spotlight($('feedback'), $('nextQ'));
@@ -563,12 +563,11 @@ function talkStep(S) {
   const history = [{ role: 'emma', en: t.opener_en, ko: t.opener_ko }];
   const fh = FIRST_HELP[S.level] || FIRST_HELP[1];
   let sugg = t.suggestions && t.suggestions.length ? t.suggestions.slice(0, 3) : [{ en: fh[0], ko: fh[1] }];
-  let picked = -1;
   let slide = 0;
   let left = TALK_SECONDS;
   let ended = false, busy = false, waitingNext = false, timeUp = false;
 
-  mount(`<section class="screen talk2">
+  mount(`<section class="screen fit talk2">
     ${header(S, 0)}
     <p class="timer2" id="timer">남은 시간 ${fmt(left)}</p>
 
@@ -624,48 +623,17 @@ function talkStep(S) {
   function showLatest() { slide = lines().length - 1; renderBubble(); }
 
   // 대답 예시 카드
-  // 한 장씩 보여 주고, 양옆 화살표(또는 손가락으로 밀기)로 넘겨요.
-  let si = 0;
   function renderSugg() {
-    const box = $('sugg');
-    if (!box) return;
-    const list = sugg.slice(0, 3);
-    si = Math.max(0, Math.min(si, list.length - 1));
-    const x = list[si];
-    if (!x) { box.innerHTML = ''; return; }
-    box.innerHTML = `<div class="sugg-row">
-        <button class="sugg-arrow" id="suggPrev" type="button" aria-label="이전 예시" ${si === 0 ? 'disabled' : ''}>‹</button>
-        <div class="sugg-card ${si === picked ? 'picked' : ''}" id="suggCard">
-          <button class="sugg-main" type="button">
-            <span class="en" lang="en">${esc(x.en)}</span>
-            ${x.ko ? `<small>${esc(x.ko)}</small>` : ''}
-            <span class="sugg-listen">${ICON.sound} 들어 보기</span>
-          </button>
-          <button class="sugg-send" type="button">이 문장으로 대답하기</button>
-        </div>
-        <button class="sugg-arrow" id="suggNext" type="button" aria-label="다음 예시" ${si >= list.length - 1 ? 'disabled' : ''}>›</button>
-      </div>
-      ${list.length > 1 ? `<div class="slide-dots sugg-dots">${list.map((_, i) => `<span class="${i === si ? 'on' : ''}"></span>`).join('')}<small>${si + 1} / ${list.length}</small></div>` : ''}`;
-    box.querySelector('.sugg-main').addEventListener('click', () => { picked = si; renderSugg(); emma(x.en, S); });
-    box.querySelector('.sugg-send').addEventListener('click', () => send(x.en));
-    on('suggPrev', () => { if (si > 0) { si--; renderSugg(); } });
-    on('suggNext', () => { if (si < list.length - 1) { si++; renderSugg(); } });
-    // 손가락으로 좌우로 밀어서 넘기기
-    const card = $('suggCard');
-    let sx = null;
-    card.addEventListener('touchstart', (e) => { sx = e.touches[0].clientX; }, { passive: true });
-    card.addEventListener('touchend', (e) => {
-      if (sx == null) return;
-      const dx = e.changedTouches[0].clientX - sx;
-      sx = null;
-      if (Math.abs(dx) < 40) return;
-      const n = si + (dx < 0 ? 1 : -1);
-      if (n >= 0 && n < list.length) { si = n; renderSugg(); }
+    if (!$('sugg')) return;
+    carousel($('sugg'), sugg.slice(0, 3), {
+      action: '이 문장으로 대답하기',
+      onListen: (x) => { clearSpotlight(); emma(x.en, S); },
+      onPick: (x) => send(x.en),
     });
   }
   function setSugg(list) {
     const clean = (Array.isArray(list) ? list : []).filter((x) => x && x.en).slice(0, 3);
-    if (clean.length) { sugg = clean; picked = -1; si = 0; renderSugg(); }
+    if (clean.length) { sugg = clean; renderSugg(); }
   }
 
   // 내 차례: 마이크만 밝게
@@ -731,6 +699,7 @@ function talkStep(S) {
     if (!$('lower')) return;
     waitingNext = true;
     dock(false);
+    document.querySelector('.talk2')?.classList.add('fb');
     const better = r.fix_en && !sameSentence(r.fix_en, text);
     $('lower').innerHTML = `<div class="feedback" id="feedback">
         <p class="label">내가 한 말</p>
@@ -742,12 +711,14 @@ function talkStep(S) {
             <button class="ghost" id="hearFix" type="button">${ICON.sound} 들어 보기</button>
           </div>` : '<p class="praise">👍 잘 말했어요!</p>'}
       </div>
-      <button class="big primary" id="nextTurn" type="button">다음</button>`;
+      <p class="muted center-note">다음을 누르면 클라우디아가 대답해요</p>
+      <button class="big primary bottom" id="nextTurn" type="button">다음</button>`;
     on('hearFix', () => emma(r.fix_en, S));
     on('nextTurn', () => {
       waitingNext = false;
       dock(true);
-      if (nextSugg.length) { sugg = nextSugg.slice(0, 3); picked = -1; si = 0; }
+      document.querySelector('.talk2')?.classList.remove('fb');
+      if (nextSugg.length) sugg = nextSugg.slice(0, 3);
       restoreLower();
       if (reply) reply.hidden = false;
       if (timeUp) return end();

@@ -230,3 +230,50 @@ export function celebrate(el) {
   document.body.appendChild(box);
   setTimeout(() => box.remove(), 1600);
 }
+
+// 예시 카드: 한 장씩 보여 주고 양옆 화살표(또는 손가락으로 밀기)로 넘겨요.
+// items: [{en, ko}] · action: 아래 버튼 글자 · onPick(item): 버튼을 눌렀을 때 · onListen(item): 카드를 눌렀을 때
+export function carousel(box, items, { action = '이 문장으로 대답하기', onPick, onListen, start = 0 } = {}) {
+  const list = (items || []).filter((x) => x && x.en);
+  let i = Math.max(0, Math.min(start, list.length - 1));
+  const CL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const CR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  function render() {
+    if (!box || !box.isConnected) return;
+    const x = list[i];
+    if (!x) { box.innerHTML = ''; return; }
+    box.innerHTML = `<div class="sugg-row">
+        <button class="sugg-arrow" data-go="-1" type="button" aria-label="이전 예시" ${i === 0 ? 'disabled' : ''}>${CL}</button>
+        <div class="sugg-card">
+          <button class="sugg-main" type="button">
+            <span class="en" lang="en">${esc(x.en)}</span>
+            ${x.ko ? `<small>${esc(x.ko)}</small>` : ''}
+            <span class="sugg-listen">${ICON.sound} 들어 보기</span>
+          </button>
+          <button class="sugg-send" type="button">${esc(action)}</button>
+        </div>
+        <button class="sugg-arrow" data-go="1" type="button" aria-label="다음 예시" ${i >= list.length - 1 ? 'disabled' : ''}>${CR}</button>
+      </div>
+      ${list.length > 1 ? `<div class="slide-dots sugg-dots">${list.map((_, k) => `<span class="${k === i ? 'on' : ''}"></span>`).join('')}<small>${i + 1} / ${list.length}</small></div>` : ''}`;
+    box.querySelector('.sugg-main').addEventListener('click', () => { if (onListen) onListen(x, i); });
+    box.querySelector('.sugg-send').addEventListener('click', () => { if (onPick) onPick(x, i); });
+    box.querySelectorAll('.sugg-arrow').forEach((b) => b.addEventListener('click', () => move(Number(b.dataset.go))));
+    const card = box.querySelector('.sugg-card');
+    let sx = null;
+    card.addEventListener('touchstart', (e) => { sx = e.touches[0].clientX; }, { passive: true });
+    card.addEventListener('touchend', (e) => {
+      if (sx == null) return;
+      const dx = e.changedTouches[0].clientX - sx;
+      sx = null;
+      if (Math.abs(dx) >= 40) move(dx < 0 ? 1 : -1);
+    });
+  }
+  function move(d) {
+    const n = i + d;
+    if (n < 0 || n >= list.length) return;
+    i = n;
+    render();
+  }
+  render();
+  return { index: () => i };
+}
