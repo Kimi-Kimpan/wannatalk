@@ -1,6 +1,6 @@
 // 앱 설치와 빠른 열기를 위한 서비스 워커
 // 내 사이트 파일은 항상 새로 받아 보고, 인터넷이 끊기면 저장해 둔 것을 씁니다.
-const CACHE = 'wannatalk-v21';
+const CACHE = 'wannatalk-v22';
 const SHELL = [
   './',
   './index.html',

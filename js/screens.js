@@ -352,8 +352,8 @@ register('home', async () => {
   on('ahead', () => go('day', { day }));
 
   try {
-    const [letter, n, members] = await Promise.all([
-      api.pendingLetter(state.user.id), api.countPending(state.user.id), api.myContacts(),
+    const [letter, n, members, recent] = await Promise.all([
+      api.pendingLetter(state.user.id), api.countPending(state.user.id), api.myContacts(), api.myLetters(state.user.id, 40).catch(() => []),
     ]);
     const box = $('msgCard');
     if (!box) return;
@@ -374,8 +374,16 @@ register('home', async () => {
       const li = document.querySelector('#steps li[data-step="letter"]');
       if (li && !doneToday && !resuming) li.hidden = false;
     } else {
-      box.innerHTML = `<p class="label">✉️ 오늘 온 편지</p><p class="muted">아직 온 편지가 없어요.</p>
-        <button class="big plain" id="writeMsg" type="button">✉️ 편지함 · 메시지 보내기</button>`;
+      // 내가 마지막으로 보낸 대화: "○○님의 답장을 기다리고 있어요!"
+      const me = state.user.id, lastBy = {};
+      recent.forEach((l) => { const other = l.from_id === me ? l.to_id : l.from_id; if (other && !lastBy[other]) lastBy[other] = l; });
+      const waiting = Object.entries(lastBy).filter(([, l]) => l.from_id === me)
+        .map(([id]) => (members.find((m) => m.id === id) || {}).name).filter(Boolean);
+      box.innerHTML = waiting.length
+        ? `<p class="label">✉️ 편지</p><p class="big-line waiting">${esc(waiting.join(', '))}님의 답장을 기다리고 있어요!</p>
+           <button class="big plain" id="writeMsg" type="button">편지함</button>`
+        : `<p class="label">✉️ 오늘 온 편지</p><p class="muted">아직 온 편지가 없어요.</p>
+           <button class="big plain" id="writeMsg" type="button">✉️ 편지함 · 메시지 보내기</button>`;
     }
     on('writeMsg', () => go('message'));
   } catch (e) {

@@ -8,6 +8,8 @@ export function register(name, fn) { screens[name] = fn; }
 export function go(name, arg) {
   stopSpeaking();
   cancelListening();
+  document.querySelectorAll('.sheet').forEach((x) => x.remove());
+  document.body.classList.remove('sheet-open');
   if (state.timer) { clearInterval(state.timer); state.timer = null; }
   window.scrollTo(0, 0);
   state.screen = name;

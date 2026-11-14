@@ -229,6 +229,10 @@ export async function countPending(uid) {
   const { count } = await sb.from('letters').select('id', { count: 'exact', head: true }).eq('to_id', uid).is('handled_at', null);
   return count || 0;
 }
+// 이 사람에게서 온 안 읽은 편지를 모두 읽음으로 (답장을 보냈을 때)
+export async function markAllFrom(uid, fromId) {
+  await sb.from('letters').update({ handled_at: new Date().toISOString() }).eq('to_id', uid).eq('from_id', fromId).is('handled_at', null);
+}
 export async function markLetter(id) {
   await sb.from('letters').update({ handled_at: new Date().toISOString() }).eq('id', id);
 }

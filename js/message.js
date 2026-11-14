@@ -25,6 +25,7 @@ const T = {
     draft: '지금까지 쓴 글', draftEmpty: '아직 비어 있어요',
     listening: '듣고 있어요… 한국어로 말해도 돼요', converting: '영어로 바꾸고 있어요…',
     converted: '클라우디아가 고쳐 봤어요. 비교해 보고 골라 주세요.',
+    me: '나', waiting: '답장 기다리는 중', seeAll: '전체 대화 보기', close: '닫기',
     mailbox: '편지함', sendTo: (n) => `${n}님에게 보내기`, history: '주고받은 메시지', noLetters: '아직 주고받은 메시지가 없어요.',
     toWho: (n) => `내가 ${n}님에게`, fromWho: (n) => `${n}님이 보냄`, newMark: '새 편지', reply: '답장하기',
     readingLetter: '클라우디아가 편지를 읽고 있어요…', theirLetter: (n) => `${n}님이 보낸 편지 보기`,
@@ -60,6 +61,7 @@ const T = {
     draft: 'Your message so far', draftEmpty: 'Nothing yet',
     listening: 'Listening…', converting: 'Writing it down…',
     converted: 'Klaudia tidied it up. Compare and choose.',
+    me: 'You', waiting: 'waiting for a reply', seeAll: 'See all', close: 'Close',
     mailbox: 'Messages', sendTo: (n) => `Write to ${n}`, history: 'All messages', noLetters: 'No messages yet.',
     toWho: (n) => `You → ${n}`, fromWho: (n) => `From ${n}`, newMark: 'New', reply: 'Reply',
     readingLetter: 'Klaudia is reading the message…', theirLetter: (n) => `${n}'s message`,
@@ -120,6 +122,24 @@ async function pickRecipient(msg = '') {
   const byId = Object.fromEntries(contacts.map((c) => [c.id, c]));
   const me = state.user.id;
   const fmt = (d) => new Date(d).toLocaleString(lang() === 'ko' ? 'ko-KR' : 'en-GB', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  // 사람별 대화 (오래된 것 → 최근)
+  const tmap = {};
+  letters.slice().reverse().forEach((l) => {
+    const other = l.from_id === me ? l.to_id : l.from_id;
+    if (!other) return;
+    (tmap[other] = tmap[other] || { id: other, name: (byId[other] && byId[other].name) || '?', contact: byId[other], msgs: [] }).msgs.push(l);
+  });
+  const threads = Object.values(tmap).sort((x, y) => new Date(y.msgs[y.msgs.length - 1].created_at) - new Date(x.msgs[x.msgs.length - 1].created_at));
+  const allLetters = letters;
+  function bubble(l) {
+    const mine = l.from_id === me;
+    const i = allLetters.indexOf(l);
+    return `<div class="chat ${mine ? 'me' : 'them'}">
+      <div class="chat-meta">${mine ? t.me : esc((byId[l.from_id] && byId[l.from_id].name) || '?')} · ${fmt(l.created_at)}</div>
+      <div class="chat-body" lang="en">${esc(l.body)}</div>
+      <button class="ghost hear-btn" type="button" data-i="${i}">${ICON.sound} ${t.listen}</button>
+    </div>`;
+  }
   const addForm = `<form id="addForm" class="form" novalidate>
       <p class="muted">${t.addHelp}</p>
       <label for="code">${t.codeLabel}</label>
@@ -139,15 +159,17 @@ async function pickRecipient(msg = '') {
       : `<p class="muted">${t.noContacts}</p><div class="panel"><h2>${t.addTitle}</h2>${addForm}</div>`}
 
     <h2 class="list-title">${t.history}</h2>
-    <div class="letters">${letters.length ? letters.map((l, i) => {
-      const mine = l.from_id === me;
-      const other = byId[mine ? l.to_id : l.from_id];
-      return `<div class="letter-item ${mine ? 'mine' : ''}">
-        <div class="from">${mine ? esc(t.toWho((other && other.name) || '?')) : esc(t.fromWho((other && other.name) || '?'))} · <span class="muted">${fmt(l.created_at)}</span>${!mine && !l.handled_at ? ` <span class="count-pill">${t.newMark}</span>` : ''}</div>
-        <div class="body" lang="en">${esc(l.body)}</div>
+    <div class="threads">${threads.length ? threads.map((th, ti) => {
+      const last = th.msgs[th.msgs.length - 1];
+      const prev = th.msgs[th.msgs.length - 2];
+      const shown = last.from_id === me && prev && prev.from_id !== me ? [prev, last] : [last];
+      const more = th.msgs.length - shown.length;
+      return `<div class="thread">
+        <div class="thread-head"><b>${esc(th.name)}</b>${last.from_id !== me ? (last.handled_at ? '' : ` <span class="count-pill">${t.newMark}</span>`) : ` <span class="muted">· ${esc(t.waiting)}</span>`}</div>
+        ${shown.map((l) => bubble(l)).join('')}
         <div class="row">
-          <button class="ghost hear-btn" type="button" data-i="${i}">${ICON.sound} ${t.listen}</button>
-          ${!mine && other ? `<button class="ghost reply-btn" type="button" data-i="${i}">${t.reply}</button>` : ''}
+          ${last.from_id !== me && th.contact ? `<button class="big primary thread-reply" type="button" data-t="${ti}">${t.reply}</button>` : ''}
+          ${more > 0 ? `<button class="big plain thread-all" type="button" data-t="${ti}">${t.seeAll} (${th.msgs.length})</button>` : ''}
         </div>
       </div>`;
     }).join('') : `<p class="muted">${t.noLetters}</p>`}</div>
@@ -156,10 +178,35 @@ async function pickRecipient(msg = '') {
   </section>`);
   on('quit', home);
   document.querySelectorAll('.contact-btn').forEach((b) => b.addEventListener('click', () => pickTopic(contacts[Number(b.dataset.i)])));
-  document.querySelectorAll('.hear-btn').forEach((b) => b.addEventListener('click', () => speak(letters[Number(b.dataset.i)].body, { rate: 0.85, button: b })));
-  document.querySelectorAll('.reply-btn').forEach((b) => b.addEventListener('click', () => {
-    const l = letters[Number(b.dataset.i)];
-    writeMessage(byId[l.from_id], 'reply', l);
+  const bindHear = (root) => root.querySelectorAll('.hear-btn').forEach((b) => b.addEventListener('click', () => speak(letters[Number(b.dataset.i)].body, { rate: 0.85, button: b })));
+  bindHear(document);
+  document.querySelectorAll('.thread-reply').forEach((b) => b.addEventListener('click', () => {
+    const th = threads[Number(b.dataset.t)];
+    writeMessage(th.contact, 'reply', th.msgs[th.msgs.length - 1]);
+  }));
+  // 전체 대화: 화면 전체를 덮는 창에서 위아래로 넘겨 보기
+  document.querySelectorAll('.thread-all').forEach((b) => b.addEventListener('click', () => {
+    const th = threads[Number(b.dataset.t)];
+    const last = th.msgs[th.msgs.length - 1];
+    const sheet = document.createElement('div');
+    sheet.className = 'sheet';
+    sheet.setAttribute('role', 'dialog');
+    sheet.setAttribute('aria-modal', 'true');
+    sheet.innerHTML = `<div class="sheet-inner" lang="${lang()}">
+      <div class="bar"><b class="sheet-title">${esc(th.name)}</b><button class="ghost" id="sheetClose" type="button">${t.close}</button></div>
+      <div class="sheet-list">${th.msgs.map((l) => bubble(l)).join('')}</div>
+      ${last.from_id !== me && th.contact ? `<button class="big primary" id="sheetReply" type="button">${t.reply}</button>` : ''}
+    </div>`;
+    document.body.appendChild(sheet);
+    document.body.classList.add('sheet-open');
+    bindHear(sheet);
+    const close = () => { sheet.remove(); document.body.classList.remove('sheet-open'); };
+    sheet.querySelector('#sheetClose').addEventListener('click', close);
+    const r = sheet.querySelector('#sheetReply');
+    if (r) r.addEventListener('click', () => { close(); writeMessage(th.contact, 'reply', last); });
+    const list = sheet.querySelector('.sheet-list');
+    list.scrollTop = list.scrollHeight;
+    sheet.querySelector('#sheetClose').focus();
   }));
   $('addForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -359,7 +406,7 @@ function review(to, lines, replyTo) {
     $('msg').textContent = t.sending;
     try {
       await api.sendLetter({ to_id: to.id, body, reply_to: replyTo ? replyTo.id : null });
-      if (replyTo && replyTo.to_id === state.user.id) api.markLetter(replyTo.id).catch(() => {});
+      api.markAllFrom(state.user.id, to.id).catch(() => {});
       if (learner) api.addEntry({ kind: 'letter', prompt_en: replyTo ? replyTo.body : null, answer_en: body, answer_ko: lines.map((x) => x.ko).filter(Boolean).join(' ') }).catch(() => {});
       mount(`<section class="screen center" lang="${lang()}">
         <div class="big-emoji" aria-hidden="true">✉️</div>

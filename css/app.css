@@ -573,3 +573,24 @@ input.code { font-family: var(--font-en); font-size: 34px; letter-spacing: 8px; 
 .compare .mine-line { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 @media (max-height: 700px) { .points .point-btn { min-height: 56px; font-size: 19px; } }
 .link-error { border-color: var(--bad); background: var(--bad-bg); } .link-error .big { width: 100%; margin-top: 6px; }
+
+/* 편지함: 사람별 대화 */
+.threads { display: flex; flex-direction: column; gap: 14px; }
+.thread { background: var(--card); border: 2px solid var(--line); border-radius: 18px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.thread-head { font-size: 21px; }
+.thread .row .big { flex: 1; min-height: 58px; font-size: 20px; }
+.chat { max-width: 92%; border-radius: 16px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; }
+.chat.them { align-self: flex-start; background: var(--tint); border-radius: 4px 16px 16px 16px; }
+.chat.me { align-self: flex-end; background: color-mix(in srgb, var(--primary) 18%, var(--card)); border-radius: 16px 4px 16px 16px; }
+.chat-meta { font-size: 14px; color: var(--ink-soft); font-weight: 700; }
+.chat-body { font-size: 20px; line-height: 1.4; }
+.chat .ghost { align-self: flex-start; min-height: 40px; padding: 2px 10px; font-size: 15px; margin-top: 2px; }
+.waiting { color: var(--primary); }
+/* 전체 대화 창 */
+body.sheet-open { overflow: hidden; }
+.sheet { position: fixed; inset: 0; z-index: 40; background: var(--paper); display: flex; justify-content: center; animation: sheetUp .25s ease-out; }
+.sheet-inner { width: 100%; max-width: 720px; height: 100%; display: flex; flex-direction: column; gap: 10px; padding: 14px 18px calc(14px + env(safe-area-inset-bottom)); }
+.sheet-title { font-size: 24px; }
+.sheet-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 2px; }
+.sheet .big { flex: none; }
+@keyframes sheetUp { from { transform: translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
