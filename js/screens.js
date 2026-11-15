@@ -1,5 +1,6 @@
 // 로그인, 처음 설정, 홈, 설정 화면
 import { state, register, go, mount, on, $, esc, today, loading, errorScreen, avatar } from './ui.js';
+import { prepareDay } from './learn.js';
 import * as api from './api.js';
 import { TOPICS, topicForDay, cycleForDay, LEVEL_NAMES } from './content.js';
 import { TOTAL_DAYS } from './config.js';
@@ -397,6 +398,8 @@ register('home', async () => {
   on('start', () => go('day', { day }));
   on('review', () => go('day', { day: day - 1, review: true }));
   on('ahead', () => go('day', { day }));
+  // 다음에 할 공부를 미리 만들어 둬요 (레슨 시작을 누르면 바로 열려요)
+  setTimeout(() => prepareDay(day), 1500);
   // 끝낸 단계를 누르면: 점수와 마친 시간을 보여 주고, 다시 하기
   document.querySelectorAll('.step-redo').forEach((b) => b.addEventListener('click', () => stepInfo(b.dataset.step)));
   async function stepInfo(step) {

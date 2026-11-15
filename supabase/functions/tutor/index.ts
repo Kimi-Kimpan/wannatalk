@@ -222,7 +222,7 @@ async function tryGemini(model: string, system: string, prompt: string, temperat
   throw new GeminiError(502, "AI failed");
 }
 
-async function gemini(system: string, prompt: string, temperature = 0.7, maxTokens = 4096, meter?: Meter): Promise<any> {
+async function gemini(system: string, prompt: string, temperature = 0.7, maxTokens = 4096, meter?: Meter, hedgeMs = HEDGE_MS): Promise<any> {
   const models = modelOrder();
   if (!models.length) throw new GeminiError(500, "No AI key is set");
 
@@ -251,7 +251,7 @@ async function gemini(system: string, prompt: string, temperature = 0.7, maxToke
           else if (running === 0) { finish(); reject(lastErr); }
         });
     };
-    const hedge = setInterval(launch, HEDGE_MS);       // 느리면 다음 모델도 함께
+    const hedge = setInterval(launch, hedgeMs);        // 느리면 다음 모델도 함께 (수업 만들기처럼 원래 긴 일은 오래 기다려요)
     const limit = setTimeout(() => { if (!done) { finish(); reject(new GeminiError(504, "AI timed out")); } }, TOTAL_MS);
     launch();
   });
@@ -289,7 +289,7 @@ Rules:
 - Every English sentence must fit the level. Korean must be natural, polite (존댓말).
 - choices are 3 different possible answers he could pick, each fitting the level.
 - Questions are about HIS life, so the answers are personal.`;
-  return await gemini(system, prompt, 0.8, 4096, m);
+  return await gemini(system, prompt, 0.8, 4096, m, 35000);
 }
 
 // 묻고 답하기: 대답 확인
@@ -303,8 +303,11 @@ ${LEVELS[level]}
 Return JSON:
 {
   "good": true or false,          // true if the meaning is understandable, even with small mistakes
-  "reply_en": "Klaudia's short warm reaction (max 12 words), may include a tiny follow-up",
+  "reply_en": "Klaudia's short warm reaction (max 12 words). It may end with ONE short, natural follow-up question about what he just said",
   "reply_ko": "Korean meaning of reply_en",
+  "follow_up": null or {"en": "the follow-up question exactly as asked in reply_en", "ko": "Korean meaning",
+                        "choices": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]},
+                        // only when reply_en asks a question; choices are 3 different short answers at his level
   "better_en": "a natural, correct version of what he meant, at his level",
   "better_ko": "Korean meaning",
   "tip_ko": "one short Korean tip about grammar or a word, or empty string",
@@ -630,7 +633,7 @@ Return JSON:
   "body":  [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ],
   "close": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]${b.reply_to ? `,
   "letter_ko": "natural Korean translation of the message being replied to",
-  "points": [ {"ko": "one thing in their message worth answering, described in short Korean (e.g. '오늘 하루 어땠는지 물어봤어요')", "body": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]} ]   // 2 or 3 points, each with 3 different one-sentence answers` : ""}
+  "points": [ {"ko": "one thing in their message worth answering, as ONE full natural Korean sentence saying what they wrote (e.g. '두 사람도 오늘은 편히 쉬면 좋겠다고 했어요.')", "body": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]} ]   // one point per distinct thing in the message (1 to 5 points), each with 3 different short one-sentence answers (max 8 words)` : ""}
 }
 "ko" is the natural Korean meaning (polite). The three options in each part should be clearly different.`;
   return await gemini(system, prompt, 0.8, b.reply_to ? 2200 : 1200, m);

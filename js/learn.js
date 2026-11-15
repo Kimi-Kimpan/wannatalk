@@ -2,7 +2,7 @@
 import { state, register, go, mount, on, $, esc, topBar, shuffle, today, loading, errorScreen, avatar, tileBuilder, toTiles, ICON, spotlight, clearSpotlight, hear, celebrate, carousel } from './ui.js';
 import { speak, prefetch, setVoiceLevel, cancelListening, canListen, bestSimilarity, sameSentence } from './speech.js';
 import { TOPICS, topicForDay, cycleForDay, SPEECH_RATE } from './content.js';
-import { TALK_SECONDS } from './config.js';
+import { TALK_SECONDS, TOTAL_DAYS } from './config.js';
 import * as api from './api.js';
 import { wordDiff, hasHangul } from './message.js';
 
@@ -47,7 +47,22 @@ function tidy(c) {
   c.title_ko = str(c.title_ko);
   return c;
 }
-async function loadPack(day) {
+// 같은 날 공부를 두 번 만들지 않도록 기다리는 중인 것을 함께 써요
+const preparing = new Map();
+function loadPack(day) {
+  if (!preparing.has(day)) {
+    const p = makeOrGetPack(day);
+    preparing.set(day, p);
+    p.catch(() => preparing.delete(day));
+  }
+  return preparing.get(day);
+}
+// 홈 화면이나 공부를 마친 뒤 다음 공부를 미리 만들어 둬요 (누르면 바로 시작)
+export function prepareDay(day) {
+  if (!day || day > TOTAL_DAYS || !state.profile) return;
+  loadPack(day).catch(() => {});
+}
+async function makeOrGetPack(day) {
   const existing = await api.getPack(day);
   if (existing && validPack(existing.content)) return existing;
   const p = state.profile;
@@ -65,6 +80,9 @@ async function startDay({ day, review = false, startStep = null }) {
     if (p) p.textContent = '조금만 기다려 주세요. 새 공부를 만들 때는 30초쯤 걸려요…';
   }, 12000);
   let pack;
+  // 편지와 기억해 둔 이야기는 공부 내용과 함께 동시에 불러와요
+  const letterP = review ? Promise.resolve(null) : api.pendingLetter(state.user.id).catch(() => null);
+  const notesP = api.recentNotes(30).catch(() => []);
   try {
     pack = await loadPack(day);
   } catch (e) {
@@ -73,10 +91,7 @@ async function startDay({ day, review = false, startStep = null }) {
       () => startDay({ day, review, startStep }));
   }
   clearTimeout(slow);
-  let letter = null;
-  if (!review) { try { letter = await api.pendingLetter(state.user.id); } catch (e) { /* 편지 없이 진행 */ } }
-  let notes = [];
-  try { notes = await api.recentNotes(30); } catch (e) { /* 무시 */ }
+  const [letter, notes] = await Promise.all([letterP, notesP]);
 
   const steps = [letter ? 'letter' : null, 'cards', 'words', 'qa', 'talk'].filter(Boolean);
   const S = {
@@ -172,42 +187,49 @@ async function letterStep(S) {
     from = members.find((m) => m.id === L.from_id) || from;
   } catch (e) { /* 무시 */ }
   const fromName = from.name || '가족';
-  loading(`${fromName}님의 편지를 읽기 쉽게 준비하고 있어요…`);
   const base = {
     writer_role: 'learner', level: S.level, reader_level: from.level || 1,
     from_name: state.profile.name, to_name: fromName, topic: 'reply', reply_to: L.body,
   };
+  // 편지를 읽는 동안 답장 준비를 뒤에서 해 둬요 (기다리는 화면 없이)
   let plan = null;
-  try { plan = await api.ai('compose', { ...base, mode: 'plan', notes: S.notes.slice(0, 10) }); } catch (e) { /* 원문만 */ }
+  const planP = api.ai('compose', { ...base, mode: 'plan', notes: S.notes.slice(0, 10) })
+    .then((r) => { plan = r; if ($('letterKo') && r && r.letter_ko) $('letterKo').textContent = r.letter_ko; return r; })
+    .catch(() => null);
+
   const ok = (x) => x && typeof x.en === 'string' && x.en.trim();
-  const points = plan && Array.isArray(plan.points) ? plan.points.filter((x) => x && x.ko) : [];
-  const answers = [
-    ...points.flatMap((x) => (Array.isArray(x.body) ? x.body.filter(ok) : [])),
-    ...((plan && Array.isArray(plan.body)) ? plan.body.filter(ok) : []),
-  ];
   const nWords = (x) => x.en.trim().split(/\s+/).length;
-  // 1번: 낱말 조합용 짧은 문장 (낱말 7개 이하)
-  const tileTarget = answers.filter((x) => nWords(x) <= 7).sort((a, b) => nWords(a) - nWords(b))[0] || answers[0] || null;
-  // 2번: 말하기 힌트 (편지의 다른 부분)
-  const speakHint = points[1] || points[0] || null;
-  const speakExample = (speakHint && Array.isArray(speakHint.body) ? speakHint.body.find(ok) : null) || answers.find((x) => x !== tileTarget) || null;
-  // 3번: 끝인사 고르기
-  const closers = ((plan && Array.isArray(plan.close)) ? plan.close.filter(ok) : []).slice(0, 3);
-  if (!closers.length) closers.push({ en: 'Talk soon!', ko: '또 이야기해요!' }, { en: 'Take care!', ko: '잘 지내요!' }, { en: 'How about you?', ko: '당신은 어때요?' });
+  let steps = [];   // [{ko, options:[{en,ko}], mode:'tiles'|'speak'}]
+  let parts = [];   // 단계마다 쓴 문장 [{items:[{en,ko}]}]
+  let backTo = false; // ＋로 들어왔으면 끝나고 요약으로
 
-  // 세 부분에 쓴 문장
-  const parts = [
-    { key: 'tiles', title: '낱말로 만든 문장', items: [] },
-    { key: 'speak', title: '말로 한 문장', items: [] },
-    { key: 'pick', title: '고른 끝인사', items: [] },
-  ];
-  let backTo = null; // + 버튼으로 들어왔으면 끝나고 요약으로
+  // 편지 내용에 따라 단계 수를 정해요: 앞쪽 절반은 낱말 조각, 뒤쪽 절반은 말하기
+  function buildSteps() {
+    const pts = plan && Array.isArray(plan.points) ? plan.points.filter((x) => x && x.ko && Array.isArray(x.body) && x.body.some(ok)) : [];
+    const list = pts.map((x) => ({ ko: x.ko, options: x.body.filter(ok).slice(0, 3) }));
+    const generic = [
+      { ko: `${fromName}님 편지에 대한 내 마음을 한마디 전해 봐요.`, options: (plan && Array.isArray(plan.body) ? plan.body : []).filter(ok).slice(0, 3) },
+      { ko: '마지막으로 짧게 인사해요.', options: (plan && Array.isArray(plan.close) ? plan.close : []).filter(ok).slice(0, 3) },
+    ];
+    for (const g of generic) if (list.length < 2 && g.options.length) list.push(g);
+    if (!list.length) list.push({ ko: `${fromName}님에게 하고 싶은 말을 해 봐요.`, options: [{ en: 'Thank you for your letter.', ko: '편지 고마워요.' }] });
+    steps = list.slice(0, 6);
+    const tilesN = Math.ceil(steps.length / 2);
+    steps.forEach((x, i) => {
+      x.mode = i < tilesN ? 'tiles' : 'speak';
+      // 낱말 조각 단계는 짧은 문장이 먼저 오게
+      if (x.mode === 'tiles') x.options = x.options.slice().sort((p, q) => nWords(p) - nWords(q));
+    });
+    parts = steps.map(() => ({ items: [] }));
+  }
 
+  function chips(n) {
+    return steps.map((x, i) => `<span class="${i === n ? 'on' : ''}">${i + 1}${i === n ? (x.mode === 'tiles' ? ' 낱말' : ' 말하기') : ''}</span>`).join('');
+  }
   function frame(n, inner, { bubble = '', compact = false } = {}) {
     mount(`<section class="screen fit letter-reply">
-      ${header(S, 0.2 + (n / 3) * 0.6)}
-      <div class="reply-steps"><span class="${n === 0 ? 'on' : ''}">1 낱말</span><span class="${n === 1 ? 'on' : ''}">2 말하기</span><span class="${n === 2 ? 'on' : ''}">3 끝인사</span>
-        <button class="letter-link" id="seeLetter" type="button">편지 보기 ▾</button></div>
+      ${header(S, 0.15 + (n / steps.length) * 0.7)}
+      <div class="reply-steps">${chips(n)}<button class="letter-link" id="seeLetter" type="button">편지 보기 ▾</button></div>
       ${compact ? '' : `<div class="emma-row">${avatar('sm')}<div class="bubble"><p class="ko-line">${bubble}</p></div></div>`}
       ${inner}
     </section>`);
@@ -232,16 +254,25 @@ async function letterStep(S) {
     pop.querySelector('#letterClose').addEventListener('click', close);
     pop.querySelector('#letterHear').addEventListener('click', (e) => speak(L.body, { rate: S.rate, button: e.currentTarget }));
   }
-  const after = (n) => { if (backTo) { backTo = null; return summary(); } return [tilesStep, speakStep, pickStep][n + 1] ? [tilesStep, speakStep, pickStep][n + 1]() : summary(); };
+  const ask = (x) => `${esc(x.ko)} <b>뭐라고 답해 볼까요?</b>`;
+  function done(n, item) {
+    if (backTo) parts[n].items.push(item); else parts[n].items = [item];
+    clearSpotlight();
+    if (backTo) { backTo = false; return summary(); }
+    return n + 1 < steps.length ? runStep(n + 1) : summary();
+  }
+  function runStep(n) { return steps[n].mode === 'tiles' ? tilesPick(n) : speakStep(n); }
+  const backBtn = (n) => `<button class="round-ghost" id="prevStep" type="button">${n === 0 && !backTo ? '편지 다시 보기' : '이전 단계'}</button>`;
+  function bindBack(n) { on('prevStep', () => { if (backTo) { backTo = false; summary(); } else if (n === 0) read(); else runStep(n - 1); }); }
 
-  // 0. 편지 읽기
+  // 0. 편지 읽기 (번역은 준비되는 대로 나타나요)
   function read() {
     mount(`<section class="screen fit letter-read">
       ${header(S, 0)}
       <h2>✉️ ${esc(fromName)}님이 편지를 보냈어요</h2>
       <div class="card letter grow-box">
         <p class="en letter-text" lang="en">${esc(L.body)}</p>
-        ${plan && plan.letter_ko ? `<p class="ko">${esc(plan.letter_ko)}</p>` : ''}
+        <p class="ko" id="letterKo">${plan && plan.letter_ko ? esc(plan.letter_ko) : ''}</p>
       </div>
       <div class="listen-row">
         <button class="listen" id="play" type="button">${ICON.sound} 듣기</button>
@@ -256,72 +287,97 @@ async function letterStep(S) {
     on('play', () => say(L.body, S));
     on('slow', () => say(L.body, S, 'play', true));
     on('later', async () => { try { await api.markLetter(L.id); } catch (e) { /* 무시 */ } nextStep(S); });
-    on('write', () => (tileTarget ? tilesStep() : speakStep()));
+    on('write', async () => {
+      if (!plan) { loading('클라우디아가 답장 쓸 준비를 하고 있어요…'); await planP; }
+      if (!steps.length) buildSteps();
+      runStep(0);
+    });
   }
 
-  // 1. 낱말 조합: 짧은 문장 하나를 낱말 조각(최대 4개)으로
+  // 낱말 단계 ①: 예시를 넘겨 보고 만들 문장 고르기
+  function tilesPick(n) {
+    const x = steps[n];
+    frame(n, `<div class="sugg-list" id="opts"></div>
+      <div class="compose-dock bottom">${backBtn(n)}<span></span><button class="round-ghost" id="skipStep" type="button">건너뛰기</button></div>`,
+      { bubble: `${ask(x)}<br><small>예시를 옆으로 넘겨 보고, 고른 문장을 낱말로 만들어요.</small>` });
+    bindBack(n);
+    on('skipStep', () => (backTo ? (backTo = false, summary()) : n + 1 < steps.length ? runStep(n + 1) : summary()));
+    carousel($('opts'), x.options, {
+      action: '이 문장 만들기',
+      onListen: (o) => speak(o.en, { rate: S.rate }),
+      onPick: (o) => tilesBuild(n, o),
+    });
+  }
+  // 낱말 단계 ②: 조각(최대 4개)을 순서대로 눌러 만들기
   function chunks(sentence) {
     const w = String(sentence).trim().split(/\s+/);
-    const n = Math.min(4, w.length);
+    const k2 = Math.min(4, w.length);
     const out = [];
-    for (let i = 0; i < n; i++) out.push(w.slice(Math.round((i * w.length) / n), Math.round(((i + 1) * w.length) / n)).join(' '));
+    for (let i = 0; i < k2; i++) out.push(w.slice(Math.round((i * w.length) / k2), Math.round(((i + 1) * w.length) / k2)).join(' '));
     return out.filter(Boolean);
   }
-  function tilesStep() {
-    if (!tileTarget) return speakStep();
-    const pieces = chunks(tileTarget.en);
+  function tilesBuild(n, target) {
+    const pieces = chunks(target.en);
     let order = shuffle(pieces.map((_, i) => i));
-    if (order.every((v, i) => v === i) && order.length > 1) order = order.slice(1).concat(order[0]);
-    frame(0, `<p class="target-ko">"${esc(tileTarget.ko || '')}"</p>
+    if (order.length > 1 && order.every((v, i) => v === i)) order = order.slice(1).concat(order[0]);
+    frame(n, `<p class="target-ko">"${esc(target.ko || '')}"</p>
       <div id="tiles" class="tiles big-tiles"></div>
       <p class="hint" id="hint" aria-live="polite"></p>
       <div class="nav bottom">
-        <button class="prev" id="reset" type="button">다시 하기</button>
-        <button class="next" id="done" type="button" disabled>다음</button>
-      </div>`, { bubble: '이런 뜻으로 답장해 볼까요?<br><b>조각을 차례대로 눌러</b> 문장을 만들어요.' });
+        <button class="prev" id="backPick" type="button">다른 문장</button>
+        <button class="next" id="doneTiles" type="button" disabled>다음</button>
+      </div>`, { bubble: '<b>조각을 차례대로 눌러</b> 문장을 만들어요.<br><small>잘못 누른 조각은 위에서 다시 누르면 빠져요.</small>' });
     const tb = tileBuilder($('tiles'), order.map((i) => pieces[i]), (txt) => {
-      const right = sameSentence(txt, tileTarget.en);
-      if ($('done')) $('done').disabled = !right;
-      if (right && $('hint')) {
+      const right = sameSentence(txt, target.en);
+      if ($('doneTiles')) $('doneTiles').disabled = !right;
+      if (!$('hint')) return;
+      if (right) {
         $('hint').innerHTML = '<span class="cheer">🎉 잘 만들었어요!</span>';
         celebrate($('hint'));
-        say(tileTarget.en, S);
-        spotlight($('done'), $('hint'), $('tiles'));
-      } else if ($('hint') && txt && txt.split(' ').length >= tileTarget.en.split(' ').length) {
+        say(target.en, S);
+        spotlight($('doneTiles'), $('hint'), $('tiles'));
+      } else if (txt && txt.split(' ').length >= target.en.split(' ').length) {
         $('hint').textContent = '순서가 조금 달라요. 위의 조각을 누르면 빠져요.';
-      } else if ($('hint')) { $('hint').textContent = ''; clearSpotlight(); }
+      } else { $('hint').textContent = ''; clearSpotlight(); }
     });
-    on('reset', () => tb.clear());
-    on('done', () => { parts[0].items.push({ en: tileTarget.en, ko: tileTarget.ko || '' }); clearSpotlight(); after(0); });
+    on('backPick', () => { clearSpotlight(); tilesPick(n); });
+    on('doneTiles', () => done(n, { en: target.en, ko: target.ko || '' }));
+    void tb;
   }
 
-  // 2. 말하기: 한국어로 말해도 클라우디아가 쉬운 영어로
-  function speakStep() {
-    const hintKo = speakHint ? speakHint.ko : '편지에 대한 내 생각';
-    frame(1, `<div class="example-box">${speakExample ? `<p class="label">예를 들면</p><p class="en" lang="en">${esc(speakExample.en)}</p><p class="muted">${esc(speakExample.ko || '')}</p>` : ''}</div>
+  // 말하기 단계: 예시 카드 안에 '예시 쓰기', 아래에 이전 단계 · 마이크 · 건너뛰기
+  function speakStep(n) {
+    const x = steps[n];
+    frame(n, `<div class="sugg-list" id="opts"></div>
       <p class="hint" id="hint" aria-live="polite"></p>
       <div class="compose-dock bottom">
-        <button class="round-ghost" id="skip" type="button">건너뛰기</button>
+        ${backBtn(n)}
         ${canListen ? `<button class="mic-round" id="mic" type="button" aria-label="말하기">${ICON.mic}<span>말하기</span></button>` : '<span></span>'}
-        ${speakExample ? '<button class="round-ghost" id="useEx" type="button">예시 쓰기</button>' : '<span></span>'}
-      </div>`, { bubble: `이번엔 <b>직접 말해</b> 볼까요?<br>· ${esc(hintKo)}<br><small>한국어로 말해도 영어로 바꿔 드려요.</small>` });
-    on('skip', () => after(1));
-    on('useEx', () => compare({ en: speakExample.en, ko: speakExample.ko || '', said: speakExample.en }));
+        <button class="round-ghost" id="skipStep" type="button">건너뛰기</button>
+      </div>`, { bubble: `${ask(x)}<br><small>한국어로 말해도 영어로 바꿔 드려요.</small>` });
+    bindBack(n);
+    on('skipStep', () => (backTo ? (backTo = false, summary()) : n + 1 < steps.length ? runStep(n + 1) : summary()));
+    carousel($('opts'), x.options, {
+      action: '예시 쓰기',
+      soft: true,
+      onListen: (o) => speak(o.en, { rate: S.rate }),
+      onPick: (o) => done(n, { en: o.en, ko: o.ko || '' }),
+    });
     on('mic', async () => {
       const said = await hear($('mic'), $('hint'), { listening: '듣고 있어요… 한국어로 말해도 돼요', lang: 'auto', silenceMs: 2200 });
       if (!said || !said[0] || !$('hint')) return;
       $('hint').textContent = '영어로 바꾸고 있어요…';
       try {
-        const r = await api.ai('compose', { ...base, mode: 'voice', step: 'body', said: said[0], draft: parts.flatMap((x) => x.items.map((i) => i.en)) });
+        const r = await api.ai('compose', { ...base, mode: 'voice', step: 'body', said: said[0], draft: parts.flatMap((p0) => p0.items.map((i) => i.en)) });
         if (!r || !r.en) throw new Error('empty');
-        compare({ en: r.en, ko: r.ko || '', said: said[0] });
+        compare(n, { en: r.en, ko: r.ko || '', said: said[0] });
       } catch (e) { if ($('hint')) $('hint').textContent = '바꾸지 못했어요. 한 번 더 말씀해 주세요.'; }
     });
   }
-  function compare(x) {
+  function compare(n, x) {
     const korean = hasHangul(x.said);
     const d = korean ? { mine: esc(x.said), fixed: esc(x.en), changed: true } : wordDiff(x.said, x.en);
-    frame(1, `<div class="compare">
+    frame(n, `<div class="compare">
         <p class="label">내가 한 말</p><p class="mine-line">${d.mine}</p>
         <p class="label">클라우디아가 고친 문장</p><p class="fixed-line" lang="en">${d.fixed}</p>
         ${x.ko ? `<p class="muted">${esc(x.ko)}</p>` : ''}
@@ -332,31 +388,25 @@ async function letterStep(S) {
         <button class="mic plain mid" id="again" type="button">${ICON.mic} 다시 말하기</button>
         <button class="primary mid" id="use" type="button">이 문장 사용하기</button>
       </div>`, { compact: true });
-    on('again', speakStep);
-    on('use', () => { parts[1].items.push({ en: x.en, ko: x.ko }); after(1); });
+    on('again', () => speakStep(n));
+    on('use', () => done(n, { en: x.en, ko: x.ko }));
   }
 
-  // 3. 끝인사 고르기
-  function pickStep() {
-    frame(2, `<div class="sugg-list bottom" id="opts"></div>`, { bubble: '마지막으로 <b>끝인사</b>를 골라요.<br>옆으로 넘겨 보고 마음에 드는 걸 누르세요.' });
-    carousel($('opts'), closers, {
-      action: '이 문장 사용하기',
-      onListen: (x) => speak(x.en, { rate: S.rate }),
-      onPick: (x) => { parts[2].items.push({ en: x.en, ko: x.ko || '' }); after(2); },
-    });
-  }
-
-  // 4. 보내기 전에: 세 부분을 나눠 보여 주고, + 로 더 붙이거나 수정
-  function body() { return parts.flatMap((x) => x.items.map((i) => i.en.trim())).filter(Boolean).join(' '); }
+  // 보내기 전에: 단계마다 나눠 보여 주고 ＋(더 붙이기) · 수정 · 삭제
+  function body() { return parts.flatMap((p0) => p0.items.map((i) => i.en.trim())).filter(Boolean).join(' '); }
   function summary() {
     clearSpotlight();
     mount(`<section class="screen fit letter-summary">
-      ${header(S, 0.85)}
+      ${header(S, 0.9)}
       <h2>이렇게 보낼게요 <button class="letter-link inline" id="seeLetter" type="button">편지 보기 ▾</button></h2>
-      <div class="sum-list">${parts.map((x, i) => `<div class="sum-part">
-        <div class="sum-head"><span class="label">${i + 1}. ${x.title}</span>
-          <span class="sum-btns"><button class="ghost sum-add" type="button" data-i="${i}" aria-label="${x.title}에 더 붙이기">＋</button><button class="ghost sum-edit" type="button" data-i="${i}">수정</button></span></div>
-        <div class="sum-text" id="sum${i}">${x.items.length ? `<p lang="en">${esc(x.items.map((t) => t.en).join(' '))}</p>` : '<p class="muted">비어 있어요</p>'}</div>
+      <div class="sum-list">${steps.map((x, i) => `<div class="sum-part">
+        <div class="sum-head"><span class="label">${i + 1}. ${x.mode === 'tiles' ? '낱말로 만든 문장' : '말로 한 문장'}</span>
+          <span class="sum-btns">
+            <button class="ghost sum-add" type="button" data-i="${i}" aria-label="${i + 1}번에 더 붙이기">＋</button>
+            <button class="ghost sum-edit" type="button" data-i="${i}">수정</button>
+            <button class="ghost sum-del" type="button" data-i="${i}" ${parts[i].items.length ? '' : 'disabled'}>삭제</button>
+          </span></div>
+        <div class="sum-text" id="sum${i}">${parts[i].items.length ? `<p lang="en">${esc(parts[i].items.map((t) => t.en).join(' '))}</p>` : '<p class="muted">비어 있어요 · ＋를 눌러 채울 수 있어요</p>'}</div>
       </div>`).join('')}</div>
       <p class="msg" id="msg" role="alert"></p>
       <div class="nav bottom">
@@ -367,10 +417,8 @@ async function letterStep(S) {
     bindQuit();
     on('seeLetter', openLetter);
     on('hearAll', () => say(body(), S, 'hearAll'));
-    document.querySelectorAll('.sum-add').forEach((b) => b.addEventListener('click', () => {
-      backTo = 'summary';
-      [tilesStep, speakStep, pickStep][Number(b.dataset.i)]();
-    }));
+    document.querySelectorAll('.sum-add').forEach((b) => b.addEventListener('click', () => { backTo = true; runStep(Number(b.dataset.i)); }));
+    document.querySelectorAll('.sum-del').forEach((b) => b.addEventListener('click', () => { parts[Number(b.dataset.i)].items = []; summary(); }));
     document.querySelectorAll('.sum-edit').forEach((b) => b.addEventListener('click', () => {
       const i = Number(b.dataset.i);
       const box = $(`sum${i}`);
@@ -392,7 +440,7 @@ async function letterStep(S) {
         await api.sendLetter({ to_id: L.from_id, body: text.slice(0, 2000), reply_to: L.id });
         await api.markAllFrom(state.user.id, L.from_id).catch(() => api.markLetter(L.id));
         S.score.letter = true;
-        save(S, { kind: 'letter', prompt_en: L.body, answer_en: text, answer_ko: parts.flatMap((x) => x.items.map((i) => i.ko)).filter(Boolean).join(' ') });
+        save(S, { kind: 'letter', prompt_en: L.body, answer_en: text, answer_ko: parts.flatMap((p0) => p0.items.map((i) => i.ko)).filter(Boolean).join(' ') });
         mount(`<section class="screen center">
           <div class="big-emoji" aria-hidden="true">✉️</div>
           <h1>답장을 보냈어요!</h1>
@@ -555,7 +603,8 @@ const CHEERS = [
 ];
 
 function qaStep(S) {
-  const qs = S.c.questions;
+  // 클라우디아가 대답에 되물으면 그 질문을 바로 다음 질문으로 끼워 넣어 대화를 이어가요 (질문마다 한 번만)
+  const qs = S.c.questions.slice();
   let k = startAt(S, qs.length);
   const got = {}; // 문제마다 받은 점수 (다시 대답하면 바꿔 셉니다)
 
@@ -618,6 +667,19 @@ function qaStep(S) {
     });
   }
 
+  function addFollowUp(q, fu) {
+    if (q.follow) return;                                   // 이어지는 질문의 이어지는 질문은 만들지 않아요
+    const ok = fu && typeof fu.en === 'string' && fu.en.trim() && Array.isArray(fu.choices);
+    const has = qs[k + 1] && qs[k + 1].follow && qs[k + 1].parent === q;
+    if (!ok) { if (has) qs.splice(k + 1, 1); return; }    // 다시 대답해서 되묻지 않게 되면 빼요
+    const item = {
+      en: fu.en.trim(), ko: String(fu.ko || ''), follow: true, parent: q,
+      choices: fu.choices.filter((c) => c && c.en).slice(0, 3).map((c) => ({ en: String(c.en), ko: String(c.ko || '') })),
+    };
+    if (item.choices.length < 2) return;
+    if (has) qs[k + 1] = item; else qs.splice(k + 1, 0, item);
+  }
+
   async function answered(q, text, how, ko = '') {
     clearSpotlight();
     if (got[k] != null) { S.score.qa[0] -= got[k]; S.score.qa[1] -= 1; delete got[k]; }
@@ -632,6 +694,7 @@ function qaStep(S) {
       try {
         r = await api.ai('check', { question: q.en, answer: text, level: S.level, topic: S.topic });
         api.addNotes(r.facts, S.topic).catch(() => {});
+        addFollowUp(q, r.follow_up);
         save(S, { kind: 'qa', prompt_en: q.en, answer_en: text, better_en: r.better_en, answer_ko: r.answer_ko });
         S.score.qa[0] += r.good ? 1 : 0.5;
       } catch (e) {
@@ -660,7 +723,7 @@ function qaStep(S) {
       <div class="answer-nav" id="answerNav">
         <button class="plain prev-btn" id="prevQ" type="button" ${k === 0 ? 'disabled' : ''}>이전</button>
         <button class="plain retry-btn" id="retryQ" type="button">${ICON.mic} 다시 대답하기</button>
-        <button class="primary next-btn" id="nextQ" type="button">다음</button>
+        <button class="primary next-btn" id="nextQ" type="button">${qs[k + 1] && qs[k + 1].follow ? '이어서 대답하기' : '다음'}</button>
       </div>`;
     if ($('again')) $('again').hidden = true;
     on('hearBetter', () => emma(r.better_en, S));
@@ -1008,6 +1071,7 @@ async function finishDay(S) {
         }
       }
       state.profile = await api.updateProfile(state.user.id, fields);
+      prepareDay(S.day + 1);   // 내일 공부를 미리 만들어 둬요
     } catch (e) {
       return errorScreen('저장하지 못했어요. 인터넷을 확인하고 다시 눌러 주세요.', () => finishDay(S));
     }
