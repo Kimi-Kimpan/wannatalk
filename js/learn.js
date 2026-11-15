@@ -885,7 +885,7 @@ function talkStep(S) {
   function showSkip() {
     if ($('skip')) return;
     const c = $('controls');
-    if (c) c.insertAdjacentHTML('afterend', '<button class="plain mid wide" id="skip" type="button">대화 건너뛰고 마치기</button>');
+    if (c) c.insertAdjacentHTML('afterend', `<button class="plain mid wide" id="skip" type="button">${timeUp ? '대답하지 않고 마치기' : '대화 건너뛰고 마치기'}</button>`);
     on('skip', () => nextStep(S));
   }
 
@@ -967,7 +967,10 @@ function talkStep(S) {
     if ($('timer')) $('timer').textContent = `남은 시간 ${fmt(Math.max(0, left))}`;
     if (left <= 0) {
       clearInterval(state.timer); state.timer = null;
-      if (busy || waitingNext) timeUp = true; else end();
+      // 바로 끊지 않고, 지금 질문에 대답하고 '다음'을 누르면 마무리해요.
+      timeUp = true;
+      if ($('timer')) { $('timer').textContent = '시간 끝 · 이번 대답까지 하고 마쳐요'; $('timer').classList.add('time-up'); }
+      showSkip();
     }
   }, 1000);
 }

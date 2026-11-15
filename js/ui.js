@@ -24,7 +24,31 @@ export function mount(html, cls = '') {
   const root = $('app');
   root.className = 'app ' + cls;
   root.innerHTML = html;
+  fitScreen();
 }
+
+// 스크롤 없는 화면(.screen.fit)이 넘치면 한 단계씩 작게 (글씨를 크게 해 둔 휴대폰용)
+export function fitScreen() {
+  const s = document.querySelector('#app > .screen.fit');
+  if (!s) return;
+  s.classList.remove('tight', 'tighter');
+  const over = () => s.scrollHeight > s.clientHeight + 1;
+  if (!over()) return;
+  s.classList.add('tight');
+  if (over()) s.classList.add('tighter');
+}
+let fitQueued = false;
+const queueFit = () => {
+  if (fitQueued) return;
+  fitQueued = true;
+  requestAnimationFrame(() => { fitQueued = false; fitScreen(); });
+};
+if (typeof MutationObserver !== 'undefined') {
+  const app = document.getElementById('app');
+  if (app) new MutationObserver(queueFit).observe(app, { childList: true, subtree: true, characterData: true });
+}
+window.addEventListener('resize', queueFit);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(queueFit);
 export function on(id, fn) {
   const el = $(id);
   if (el) el.addEventListener('click', fn);

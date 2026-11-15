@@ -719,3 +719,61 @@ body.sheet-open { overflow: hidden; }
 .screen.fit.qa .mic { flex: none; min-height: 88px; font-size: 28px; }
 .sugg-send.soft { align-self: center; width: auto; min-height: 48px; margin: 4px auto 12px; padding: 0 26px; border-radius: 14px; background: transparent; border: 2px solid var(--line); color: var(--ink); font-size: 18px; font-weight: 600; }
 .sugg-send.soft:active { background: var(--tint); }
+
+/* 말풍선 안내가 마이크 위로 겹치지 않게: 줄어들지 않는 칸으로 */
+.screen.fit.qa #area > * { flex-shrink: 0; }
+.say-tip { min-height: auto; }
+.time-up { color: var(--primary); font-size: 16px !important; }
+
+/* 화면이 넘칠 때 1단계 (글씨 크게 쓰는 휴대폰) */
+.screen.fit.tight { gap: 6px; }
+.screen.fit.tight .bar .ghost { min-height: 40px; padding: 2px 12px; font-size: 17px; }
+.screen.fit.tight .step-label, .screen.fit.tight .bar p { font-size: 15px; }
+.screen.fit.tight .emma-row .avatar { width: 46px !important; height: 46px !important; }
+.screen.fit.tight .bubble { padding: 8px 12px; }
+.screen.fit.tight .bubble .en { font-size: 19px !important; line-height: 1.25; }
+.screen.fit.tight .bubble .ko, .screen.fit.tight .ko-line { font-size: 15px !important; }
+.screen.fit.tight .again { min-height: 42px !important; font-size: 17px !important; padding: 2px 12px !important; margin-left: 58px !important; }
+.screen.fit.tight .sugg-main { padding: 8px 12px; min-height: 0 !important; }
+.screen.fit.tight .sugg-main .en { font-size: 18px; }
+.screen.fit.tight .sugg-main small { font-size: 14px; }
+.screen.fit.tight .sugg-listen { display: none; }
+.screen.fit.tight .sugg-send { min-height: 44px !important; font-size: 16px !important; }
+.screen.fit.tight .sugg-send.soft { margin: 2px auto 8px; }
+.screen.fit.tight .sugg-arrow { width: 30px; }
+.screen.fit.tight .say-tip { font-size: 15px; padding: 6px 10px; }
+.screen.fit.tight .say-tip::after { width: 12px; height: 12px; bottom: -8px; }
+.screen.fit.tight .mic { min-height: 62px !important; font-size: 21px !important; }
+.screen.fit.tight .mic-round { width: 74px !important; height: 74px !important; font-size: 14px; }
+.screen.fit.tight .nav button, .screen.fit.tight .answer-nav > button { min-height: 54px !important; font-size: 19px !important; }
+.screen.fit.tight .feedback { padding: 10px 12px; }
+.screen.fit.tight .feedback > .en, .screen.fit.tight .better .en { font-size: 19px !important; }
+.screen.fit.tight .choice { min-height: 50px !important; font-size: 19px !important; }
+.screen.fit.tight .listen, .screen.fit.tight .slow { min-height: 56px !important; font-size: 20px !important; }
+.screen.fit.tight .sentence .en { font-size: 24px !important; }
+.screen.fit.tight .word-show .en { font-size: 32px !important; }
+.screen.fit.tight .say-bubble .en { font-size: 19px !important; }
+.screen.fit.tight .avatar.xl { width: 52px !important; height: 52px !important; }
+.screen.fit.tight .draft-box, .screen.fit.tight .example-box, .screen.fit.tight .compare { padding: 6px 10px; }
+.screen.fit.tight .mine-line, .screen.fit.tight .fixed-line { font-size: 18px; }
+
+/* 그래도 넘칠 때 2단계: 꼭 필요하지 않은 것은 숨기기 */
+.screen.fit.tighter .emma-row .avatar, .screen.fit.tighter .stage .avatar { display: none; }
+.screen.fit.tighter .again { margin-left: 0 !important; }
+.screen.fit.tighter .say-tip { display: none; }
+.screen.fit.tighter .sugg-dots, .screen.fit.tighter .slide-dots { display: none; }
+.screen.fit.tighter .progress { display: none; }
+.screen.fit.tighter .sugg-title, .screen.fit.tighter .center-note { display: none; }
+.screen.fit.tighter .bubble .ko { font-size: 14px !important; }
+.screen.fit.tighter .word-show .say { display: none; }
+.screen.fit.tight .timer2 { font-size: 15px !important; margin: 0; }
+.screen.fit.tight .feedback .label, .screen.fit.tight .better .label { font-size: 14px; }
+.screen.fit.tight .feedback .muted, .screen.fit.tight .feedback > .ko { font-size: 15px; }
+.screen.fit.tight .better { padding: 8px 10px; gap: 2px; }
+.screen.fit.tight .better .ghost, .screen.fit.tight .feedback .ghost { min-height: 40px; font-size: 15px; padding: 2px 10px; }
+.screen.fit.tight .say-bubble { padding: 6px 10px !important; }
+.screen.fit.tight #skip { min-height: 44px; font-size: 16px; }
+.screen.fit.tighter .feedback > .ko, .screen.fit.tighter .feedback .muted { display: none; }
+.screen.fit.tighter .tip { font-size: 14px; padding: 4px 8px; }
+.screen.fit.tighter .answer-nav > button { min-height: 48px !important; }
+.screen.fit.tighter .better .label { display: none; }
