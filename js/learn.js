@@ -698,27 +698,29 @@ function talkStep(S) {
     ${header(S, 0)}
     <p class="timer2" id="timer">남은 시간 ${fmt(left)}</p>
 
-    <div class="stage" id="stage">
-      <div class="bubble-nav">
-        <button class="nav-arrow" id="prevSlide" type="button" aria-label="이전 말">‹</button>
-        <div class="say-bubble" id="sayBubble" aria-live="polite"></div>
-        <button class="nav-arrow" id="nextSlide" type="button" aria-label="다음 말">›</button>
+    <div class="stage talk-q" id="stage">
+      <div class="emma-row">
+        ${avatar()}
+        <div class="bubble-col">
+          <div class="bubble talk-bubble" id="sayBubble" aria-live="polite"></div>
+          <div class="bubble-tools" id="bubbleTools" hidden>
+            <button class="nav-arrow" id="prevSlide" type="button" aria-label="이전 말">‹</button>
+            <div class="slide-dots" id="dots"></div>
+            <button class="nav-arrow" id="nextSlide" type="button" aria-label="다음 말">›</button>
+          </div>
+        </div>
       </div>
-      <div class="slide-dots" id="dots"></div>
-      ${avatar('xl')}
+      <button class="ghost again" id="again" type="button">${ICON.sound} 다시 듣기</button>
     </div>
 
     <div id="lower">
-      <p class="sugg-title">이렇게 말해 볼까요? <span class="muted">(옆으로 넘겨 보세요)</span></p>
       <div class="sugg-list" id="sugg"></div>
     </div>
 
     <div class="dock">
-      <p class="hint" id="hint"></p>
+      <p class="hint say-tip" id="hint"></p>
       <div class="talk-bottom" id="controls">
-        <button class="round-ghost" id="again" type="button" aria-label="다시 듣기">${ICON.sound}<span>다시 듣기</span></button>
-        ${canListen ? `<button class="mic-round" id="mic" type="button" aria-label="말하기">${ICON.mic}<span>말하기</span></button>` : ''}
-        <span class="round-spacer"></span>
+        ${canListen ? `<button class="mic" id="mic" type="button">${ICON.mic} 눌러서 대답하기</button>` : ''}
       </div>
     </div>
     <form id="typed" class="typed ${canListen ? 'optional' : ''}"><input id="typedIn" type="text" autocomplete="off" placeholder="영어로 적어서 보내도 돼요" aria-label="영어로 적기"><button class="primary" type="submit">보내기</button></form>
@@ -744,6 +746,7 @@ function talkStep(S) {
     $('sayBubble').innerHTML = `<p class="en" lang="en">${esc(m.en)}</p>${m.ko ? `<p class="ko">${esc(m.ko)}</p>` : ''}
       ${mine ? `<p class="mine"><span>내 대답</span> <span lang="en">${esc(mine.en)}</span></p>` : ''}`;
     $('dots').innerHTML = L.length > 1 ? L.map((_, i) => `<span class="${i === slide ? 'on' : ''}"></span>`).join('') : '';
+    $('bubbleTools').hidden = L.length < 2;
     $('prevSlide').disabled = slide === 0;
     $('nextSlide').disabled = slide === L.length - 1;
   }
@@ -754,6 +757,7 @@ function talkStep(S) {
     if (!$('sugg')) return;
     carousel($('sugg'), sugg.slice(0, 3), {
       action: '이 문장으로 대답하기',
+      soft: true,
       onListen: (x) => { clearSpotlight(); emma(x.en, S); },
       onPick: (x) => send(x.en),
     });
@@ -768,7 +772,7 @@ function talkStep(S) {
     if (ended || busy || waitingNext || !$('controls')) return;
     if (timeUp) return end();
     if (canListen && $('mic')) {
-      setHint('이제 말씀하실 차례예요');
+      if ($('hint')) $('hint').innerHTML = '이제 말씀하실 차례예요.<br>마이크를 누르거나 예시를 골라 주세요.';
       spotlight($('mic'), $('hint'), $('lower'), $('again'));
     } else {
       setHint('영어로 적어서 보내 주세요.');
@@ -816,7 +820,7 @@ function talkStep(S) {
 
   function restoreLower() {
     if (!$('lower')) return;
-    $('lower').innerHTML = `<p class="sugg-title">이렇게 말해 볼까요? <span class="muted">(옆으로 넘겨 보세요)</span></p><div class="sugg-list" id="sugg"></div>`;
+    $('lower').innerHTML = `<div class="sugg-list" id="sugg"></div>`;
     renderSugg();
   }
 

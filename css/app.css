@@ -777,3 +777,34 @@ body.sheet-open { overflow: hidden; }
 .screen.fit.tighter .tip { font-size: 14px; padding: 4px 8px; }
 .screen.fit.tighter .answer-nav > button { min-height: 48px !important; }
 .screen.fit.tighter .better .label { display: none; }
+
+/* 3분 대화: 묻고 답하기와 같은 배치 (질문 → 다시 듣기 → 예시 → 안내 말풍선 → 맨 아래 마이크) */
+.screen.fit.talk2 .stage.talk-q { align-items: stretch; gap: 8px; flex: none; }
+.talk-q .emma-row { display: flex; gap: 12px; align-items: flex-start; }
+.talk-q .emma-row .avatar { width: 72px; height: 72px; flex: none; }
+.talk-q .bubble-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.talk-q .talk-bubble { touch-action: pan-y; cursor: pointer; }
+.talk-q .talk-bubble .en { font-size: 23px; font-weight: 700; line-height: 1.3; }
+.talk-q .talk-bubble .ko { font-size: 17px; color: var(--ink-soft); }
+.talk-q .talk-bubble .mine { font-size: 16px; color: var(--primary); border-top: 1px dashed var(--line); padding-top: 4px; margin-top: 4px; }
+.talk-q .talk-bubble .mine span:first-child { font-weight: 700; }
+.bubble-tools { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.bubble-tools .nav-arrow { width: 44px; height: 36px; font-size: 28px; }
+.bubble-tools .slide-dots { margin: 0; }
+.talk-q .again { align-self: flex-start; margin-left: 84px; min-height: 56px; font-size: 22px; padding: 6px 18px; }
+.screen.fit.talk2 #lower { margin-top: 4px; flex: none; }
+.screen.fit.talk2 .dock { margin-top: auto; border-top: 0; padding-top: 0; display: flex; flex-direction: column; gap: 10px; flex: none; }
+.screen.fit.talk2 .dock .say-tip { margin: 0 !important; }
+.screen.fit.talk2 .talk-bottom { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+.screen.fit.talk2 .talk-bottom .mic { width: 100%; min-height: 88px; font-size: 28px; }
+.talk2.fb .talk-q .again { display: none; }
+.talk2.fb .talk-q .emma-row .avatar { display: block; width: 52px; height: 52px; }
+.talk2.fb .talk-bubble .ko, .talk2.fb .talk-bubble .mine, .talk2.fb .bubble-tools { display: none; }
+.talk2.fb .talk-bubble .en { font-size: 19px; }
+.talk2.fb #lower { flex: 1; display: flex; flex-direction: column; }
+.screen.fit.tight .talk-q .again { margin-left: 58px !important; }
+.screen.fit.tight .talk-q .talk-bubble .en { font-size: 19px; }
+.screen.fit.tight .talk-q .talk-bubble .ko { font-size: 15px; }
+.screen.fit.tight .talk2 .talk-bottom .mic, .screen.fit.tight.talk2 .talk-bottom .mic { min-height: 62px; font-size: 21px; }
+.screen.fit.tighter .talk-q .again { margin-left: 0 !important; }
+.screen.fit.talk2.fb #lower { flex: 1 1 auto; display: flex; flex-direction: column; }
