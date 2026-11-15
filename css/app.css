@@ -1,6 +1,6 @@
 /* WannaTalk — 큰 글씨, 큰 버튼, 한 화면에 한 가지 일.
-[hidden] { display: none !important; }
    배치: 가운데 한 줄 기둥. 위에는 지금 할 일, 아래에는 넘기는 버튼. */
+[hidden] { display: none !important; }
 :root {
   --paper: #F3F6FA;
   --card: #FFFFFF;
@@ -626,3 +626,71 @@ body.sheet-open { overflow: hidden; }
 @media (max-height: 720px) { .answer-nav > button { min-height: 56px; font-size: 20px; } .answer-nav .next-btn { font-size: 22px; } }
 .talk2.fb #lower .answer-nav { margin-top: auto; }
 .more-btn { align-self: flex-start; min-height: 40px; padding: 0 2px; font-size: 17px; }
+
+/* 낱말: 영어 읽고 뜻 고르기 */
+.word-show { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 0; }
+.word-show .en { font-family: var(--font-en); font-size: clamp(40px, 11vw, 60px); font-weight: 700; line-height: 1.1; }
+.word-show .say { font-size: 19px; color: var(--ink-soft); }
+.small-listen { min-height: 46px; font-size: 18px; }
+.words-q .choices { gap: 10px; }
+.after-row { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.after-row .mic { min-height: 56px; font-size: 20px; }
+@media (max-height: 720px) { .word-show .en { font-size: 40px; } .words-q .choice { min-height: 58px; } }
+
+/* 레슨 속 편지 답장 */
+.letter-reply, .letter-summary, .letter-read { gap: 10px; }
+.reply-steps { display: flex; align-items: center; gap: 6px; flex: none; }
+.reply-steps > span { font-size: 15px; font-weight: 700; color: var(--ink-soft); padding: 4px 10px; border-radius: 99px; background: var(--card); border: 1px solid var(--line); }
+.reply-steps > span.on { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+.reply-steps .letter-link { margin: 0 0 0 auto; }
+.letter-reply .emma-row { flex: none; }
+.letter-reply .emma-row .avatar { width: 56px; height: 56px; }
+.target-ko { font-size: 24px; font-weight: 700; text-align: center; flex: none; }
+.big-tiles .tile { font-size: 24px; min-height: 60px; padding: 8px 16px; }
+.big-tiles .built { min-height: 74px; }
+.example-box { background: var(--card); border: 2px dashed var(--line); border-radius: 16px; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; flex: none; }
+.example-box:empty { display: none; }
+.example-box .label { font-size: 15px; font-weight: 700; color: var(--ink-soft); }
+.example-box .en { font-size: 22px; font-weight: 700; }
+.letter-reply .compose-dock { margin-top: auto; }
+.letter-reply .compose-dock .round-ghost { font-size: 17px; }
+.letter-read .grow-box { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.letter-read .letter-text { font-size: 24px; line-height: 1.45; }
+/* 보내기 전 요약 */
+.letter-summary h2 { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.letter-link.inline { margin: 0; font-size: 16px; }
+.sum-list { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.sum-part { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
+.sum-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sum-head .label { font-size: 16px; font-weight: 700; color: var(--ink-soft); }
+.sum-btns { display: flex; gap: 6px; }
+.sum-btns .ghost { min-height: 42px; min-width: 52px; padding: 0 10px; font-size: 18px; font-weight: 700; }
+.sum-add { font-size: 24px !important; }
+.sum-text p { font-size: 21px; line-height: 1.35; margin: 0; }
+.sum-text textarea { font-size: 20px; min-height: 70px; }
+.sum-text .primary { margin-top: 6px; min-height: 48px; width: 100%; border-radius: 14px; font-weight: 700; }
+#hearAll { font-size: 19px; }
+@media (max-height: 720px) {
+  .letter-reply .emma-row .avatar { width: 44px; height: 44px; }
+  .target-ko { font-size: 20px; }
+  .big-tiles .tile { font-size: 20px; min-height: 52px; }
+  .sum-text p { font-size: 19px; }
+}
+/* 홈: 끝낸 단계 다시 하기, 지난 레슨 */
+.step-redo { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; padding: 0; cursor: pointer; }
+.redo-tag { color: var(--primary); font-weight: 700; font-size: 15px; }
+.past-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.past-btn { display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 6px 14px; border-radius: 14px; border: 2px solid var(--line); background: var(--paper); color: var(--ink); font-size: 20px; font-weight: 700; text-align: left; }
+.past-btn .go { margin-left: auto; font-size: 26px; color: var(--primary); }
+.word-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: nowrap; }
+.word-actions.wide > * { flex: 1; min-height: 72px; }
+.word-actions.wide .mic { font-size: 20px; }
+.words-q .lead { min-height: 2.9em; }
+.words-q .word-show { padding: 0; }
+@media (max-height: 720px) {
+  .words-q { gap: 8px; }
+  .words-q .lead { font-size: 18px; }
+  .word-show .en { font-size: 36px; }
+  .words-q .choice { min-height: 54px; font-size: 21px; }
+  .small-listen { min-height: 42px; font-size: 16px; }
+}

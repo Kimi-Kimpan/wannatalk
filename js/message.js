@@ -78,7 +78,7 @@ const STEPS = ['greet', 'body', 'close'];
 
 // 낱말 비교: 내가 한 말에서 빠지거나 바뀐 낱말은 줄을 긋고, 클라우디아 문장에서 새로 들어간 낱말은 색을 칠합니다.
 const norm = (w) => w.toLowerCase().replace(/[’`]/g, "'").replace(/[^a-z0-9']/g, '');
-function wordDiff(a, b) {
+export function wordDiff(a, b) {
   const A = String(a || '').split(/\s+/).filter(Boolean), B = String(b || '').split(/\s+/).filter(Boolean);
   const n = A.length, m = B.length;
   const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
@@ -93,7 +93,7 @@ function wordDiff(a, b) {
   const fixed = B.map((w, j) => (keepB[j] ? esc(w) : `<ins>${esc(w)}</ins>`)).join(' ');
   return { mine, fixed, changed: keepA.includes(false) || keepB.includes(false) };
 }
-const hasHangul = (x) => /[\u3131-\uD79D]/.test(String(x || ''));
+export const hasHangul = (x) => /[\u3131-\uD79D]/.test(String(x || ''));
 
 register('message', (opts) => start(opts || {}));
 

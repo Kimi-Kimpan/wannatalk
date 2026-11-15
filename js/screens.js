@@ -337,10 +337,13 @@ register('home', async () => {
   const checklist = STEPS.map(([id, label]) => {
     const done = doneToday || doneSteps.has(id);
     const now = !done && id === nowStep;
+    const redo = done && id !== 'letter';
     return `<li data-step="${id}" class="${done ? 'done' : ''} ${now ? 'now' : ''}" ${id === 'letter' && !doneSteps.has('letter') ? 'hidden' : ''}>
+      ${redo ? `<button class="step-redo" type="button" data-step="${id}">` : ''}
       <span class="box" aria-hidden="true">${done ? '✓' : ''}</span>
-      <span>${label}${now ? ' <small>· 여기서부터</small>' : ''}</span>
+      <span>${label}${now ? ' <small>· 여기서부터</small>' : ''}${redo ? ' <small class="redo-tag">다시 하기 ›</small>' : ''}</span>
       <span class="sr">${done ? '완료' : '아직'}</span>
+      ${redo ? '</button>' : ''}
     </li>`;
   }).join('');
 
@@ -372,6 +375,8 @@ register('home', async () => {
          </div>`
       : `<button class="big primary huge" id="start" type="button">${resuming ? '레슨 이어하기' : '오늘 레슨 시작'}</button>`}
 
+    <div class="dash-card past-card" id="pastCard" hidden></div>
+
     <div class="dash-card" id="msgCard">
       <p class="label">✉️ 오늘 온 편지</p>
       <p class="muted">확인하는 중…</p>
@@ -393,6 +398,21 @@ register('home', async () => {
   on('start', () => go('day', { day }));
   on('review', () => go('day', { day: day - 1, review: true }));
   on('ahead', () => go('day', { day }));
+  // 끝낸 단계를 누르면 그 단계부터 다시 (오늘 다 마쳤으면 오늘 레슨을 복습으로)
+  document.querySelectorAll('.step-redo').forEach((b) => b.addEventListener('click', () => {
+    go('day', doneToday ? { day: day - 1, review: true, startStep: b.dataset.step } : { day, startStep: b.dataset.step });
+  }));
+  // 지난 레슨 다시 하기
+  api.donePacks(12).then((rows) => {
+    const box = $('pastCard');
+    const list = rows.filter((r) => r.day < day - (doneToday ? 1 : 0));
+    if (!box || !list.length) return;
+    const topicOf = (id) => TOPICS.find((x) => x.id === id) || { emoji: '📘', ko: '레슨' };
+    box.hidden = false;
+    box.innerHTML = `<p class="label">📚 지난 레슨 다시 하기</p>
+      <div class="past-list">${list.map((r) => `<button class="past-btn" type="button" data-day="${r.day}"><span class="emoji" aria-hidden="true">${topicOf(r.topic).emoji}</span><span>${r.day}일째 · ${esc(topicOf(r.topic).ko)}</span><span class="go" aria-hidden="true">›</span></button>`).join('')}</div>`;
+    box.querySelectorAll('.past-btn').forEach((b) => b.addEventListener('click', () => go('day', { day: Number(b.dataset.day), review: true })));
+  }).catch(() => {});
 
   try {
     const [letter, n, members, recent] = await Promise.all([

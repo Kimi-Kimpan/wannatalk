@@ -219,6 +219,12 @@ export async function getPack(day) {
   if (error) throw error;
   return data;
 }
+// 마친 레슨 목록 (최근 것부터)
+export async function donePacks(limit = 12) {
+  const { data, error } = await sb.from('daily_packs').select('day,topic,done_at').not('done_at', 'is', null).order('day', { ascending: false }).limit(limit);
+  if (error) throw error;
+  return data || [];
+}
 export async function savePack(day, level, topic, content) {
   const { data, error } = await sb
     .from('daily_packs')
