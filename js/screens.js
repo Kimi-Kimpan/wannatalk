@@ -337,13 +337,12 @@ register('home', async () => {
   const checklist = STEPS.map(([id, label]) => {
     const done = doneToday || doneSteps.has(id);
     const now = !done && id === nowStep;
-    const redo = done && id !== 'letter';
     return `<li data-step="${id}" class="${done ? 'done' : ''} ${now ? 'now' : ''}" ${id === 'letter' && !doneSteps.has('letter') ? 'hidden' : ''}>
-      ${redo ? `<button class="step-redo" type="button" data-step="${id}">` : ''}
+      ${done ? `<button class="step-redo" type="button" data-step="${id}" aria-label="${label} 결과 보기">` : ''}
       <span class="box" aria-hidden="true">${done ? '✓' : ''}</span>
-      <span>${label}${now ? ' <small>· 여기서부터</small>' : ''}${redo ? ' <small class="redo-tag">다시 하기 ›</small>' : ''}</span>
+      <span>${label}${now ? ' <small>· 여기서부터</small>' : ''}</span>
       <span class="sr">${done ? '완료' : '아직'}</span>
-      ${redo ? '</button>' : ''}
+      ${done ? '</button>' : ''}
     </li>`;
   }).join('');
 
@@ -398,19 +397,63 @@ register('home', async () => {
   on('start', () => go('day', { day }));
   on('review', () => go('day', { day: day - 1, review: true }));
   on('ahead', () => go('day', { day }));
-  // 끝낸 단계를 누르면 그 단계부터 다시 (오늘 다 마쳤으면 오늘 레슨을 복습으로)
-  document.querySelectorAll('.step-redo').forEach((b) => b.addEventListener('click', () => {
-    go('day', doneToday ? { day: day - 1, review: true, startStep: b.dataset.step } : { day, startStep: b.dataset.step });
-  }));
-  // 지난 레슨 다시 하기
-  api.donePacks(12).then((rows) => {
+  // 끝낸 단계를 누르면: 점수와 마친 시간을 보여 주고, 다시 하기
+  document.querySelectorAll('.step-redo').forEach((b) => b.addEventListener('click', () => stepInfo(b.dataset.step)));
+  async function stepInfo(step) {
+    const label = (STEPS.find((x) => x[0] === step) || [])[1] || '';
+    const theDay = doneToday ? day - 1 : day;
+    let log = null;
+    try { log = (JSON.parse(localStorage.getItem('wt-steplog') || '{}')[theDay] || {})[step] || null; } catch (e) { /* 무시 */ }
+    let pack = null;
+    if (!log) { try { pack = await api.getPack(theDay); } catch (e) { /* 무시 */ } }
+    const at = log ? log.at : pack && pack.done_at;
+    const sc = log ? log.score : null;
+    const ps = pack && pack.score ? pack.score : {};
+    const pct = (a, b) => (b ? Math.round((a / b) * 100) : null);
+    let result = '';
+    if (step === 'cards') result = `문장 ${log && log.n ? log.n + '개' : ''}를 끝까지 따라 했어요`;
+    else if (step === 'words') result = sc ? `문제 ${sc.words[0]} / ${sc.words[1]} 맞힘 · ${pct(sc.words[0], sc.words[1])}점` : ps.words != null ? `${Math.round(ps.words * 100)}점` : '';
+    else if (step === 'qa') result = sc ? `질문 ${sc.qa[1]}개에 대답 · ${pct(sc.qa[0], sc.qa[1])}점` : ps.qa != null ? `${Math.round(ps.qa * 100)}점` : '';
+    else if (step === 'talk') result = `클라우디아와 ${sc ? sc.talk : ps.talk || 0}번 이야기했어요`;
+    else if (step === 'letter') result = sc && !sc.letter ? '다음에 답장하기로 했어요' : '답장을 보냈어요';
+    const when = at ? new Date(at).toLocaleString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+    const pop = document.createElement('div');
+    pop.className = 'modal';
+    pop.setAttribute('role', 'dialog');
+    pop.setAttribute('aria-modal', 'true');
+    pop.innerHTML = `<div class="modal-card">
+      <p class="label">${theDay}일째 · ${esc(label)}</p>
+      <div class="big-emoji" aria-hidden="true">✅</div>
+      ${result ? `<p class="modal-score">${esc(result)}</p>` : ''}
+      ${when ? `<p class="muted">마친 시간 · ${esc(when)}</p>` : ''}
+      ${step === 'letter' ? '' : '<button class="big primary" id="mRedo" type="button">이 단계 다시 하기</button>'}
+      <button class="big plain" id="mClose" type="button">닫기</button>
+    </div>`;
+    document.body.appendChild(pop);
+    document.body.classList.add('sheet-open');
+    const close = () => { pop.remove(); document.body.classList.remove('sheet-open'); };
+    pop.addEventListener('click', (e) => { if (e.target === pop) close(); });
+    pop.querySelector('#mClose').addEventListener('click', close);
+    const r = pop.querySelector('#mRedo');
+    if (r) r.addEventListener('click', () => { close(); go('day', doneToday ? { day: theDay, review: true, startStep: step } : { day, startStep: step }); });
+    pop.querySelector('#mClose').focus();
+  }
+  // 지난 레슨 다시 하기: 눌러서 펼치고, 길어지면 안에서 넘겨 보기
+  api.donePacks(200).then((rows) => {
     const box = $('pastCard');
     const list = rows.filter((r) => r.day < day - (doneToday ? 1 : 0));
     if (!box || !list.length) return;
     const topicOf = (id) => TOPICS.find((x) => x.id === id) || { emoji: '📘', ko: '레슨' };
     box.hidden = false;
-    box.innerHTML = `<p class="label">📚 지난 레슨 다시 하기</p>
-      <div class="past-list">${list.map((r) => `<button class="past-btn" type="button" data-day="${r.day}"><span class="emoji" aria-hidden="true">${topicOf(r.topic).emoji}</span><span>${r.day}일째 · ${esc(topicOf(r.topic).ko)}</span><span class="go" aria-hidden="true">›</span></button>`).join('')}</div>`;
+    box.innerHTML = `<button class="past-toggle" id="pastToggle" type="button" aria-expanded="false">
+        <span>📚 지난 레슨 다시 하기 <small class="muted">(${list.length})</small></span><span class="arrow" aria-hidden="true">▾</span></button>
+      <div class="past-list" id="pastList" hidden>${list.map((r) => `<button class="past-btn" type="button" data-day="${r.day}"><span class="emoji" aria-hidden="true">${topicOf(r.topic).emoji}</span><span>${r.day}일째 · ${esc(topicOf(r.topic).ko)}</span><span class="go" aria-hidden="true">›</span></button>`).join('')}</div>`;
+    on('pastToggle', () => {
+      const l = $('pastList'), t = $('pastToggle');
+      l.hidden = !l.hidden;
+      t.setAttribute('aria-expanded', String(!l.hidden));
+      t.classList.toggle('open', !l.hidden);
+    });
     box.querySelectorAll('.past-btn').forEach((b) => b.addEventListener('click', () => go('day', { day: Number(b.dataset.day), review: true })));
   }).catch(() => {});
 

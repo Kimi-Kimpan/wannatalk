@@ -235,7 +235,7 @@ export function celebrate(el) {
 
 // 예시 카드: 한 장씩 보여 주고 양옆 화살표(또는 손가락으로 밀기)로 넘겨요.
 // items: [{en, ko}] · action: 아래 버튼 글자 · onPick(item): 버튼을 눌렀을 때 · onListen(item): 카드를 눌렀을 때
-export function carousel(box, items, { action = '이 문장으로 대답하기', onPick, onListen, start = 0 } = {}) {
+export function carousel(box, items, { action = '이 문장으로 대답하기', onPick, onListen, start = 0, soft = false } = {}) {
   const list = (items || []).filter((x) => x && x.en);
   let i = Math.max(0, Math.min(start, list.length - 1));
   const CL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -252,7 +252,7 @@ export function carousel(box, items, { action = '이 문장으로 대답하기',
             ${x.ko ? `<small>${esc(x.ko)}</small>` : ''}
             <span class="sugg-listen">${ICON.sound} 들어 보기</span>
           </button>
-          <button class="sugg-send" type="button">${esc(action)}</button>
+          <button class="sugg-send ${soft ? 'soft' : ''}" type="button">${esc(action)}</button>
         </div>
         <button class="sugg-arrow" data-go="1" type="button" aria-label="다음 예시" ${i >= list.length - 1 ? 'disabled' : ''}>${CR}</button>
       </div>

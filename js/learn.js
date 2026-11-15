@@ -110,7 +110,19 @@ function runStep(S) {
   const fn = { letter: letterStep, cards: cardsStep, words: wordsStep, qa: qaStep, talk: talkStep }[S.steps[S.i]];
   fn(S);
 }
-function nextStep(S) { S.i++; S.resumeSub = 0; runStep(S); }
+function nextStep(S) { logStep(S); S.i++; S.resumeSub = 0; runStep(S); }
+// 단계를 마칠 때마다 시간과 점수를 기억해 둡니다 (홈에서 눌러 보면 보여 줘요)
+function logStep(S) {
+  if (S.review) return;
+  try {
+    const log = JSON.parse(localStorage.getItem('wt-steplog') || '{}');
+    const d = (log[S.day] = log[S.day] || {});
+    const step = S.steps[S.i];
+    d[step] = { at: new Date().toISOString(), score: JSON.parse(JSON.stringify(S.score)), n: step === 'cards' ? S.c.cards.length : step === 'words' ? S.c.words.length : step === 'qa' ? S.c.questions.length : 0 };
+    Object.keys(log).map(Number).sort((a, b) => b - a).slice(30).forEach((x) => delete log[x]); // 최근 30일만
+    localStorage.setItem('wt-steplog', JSON.stringify(log));
+  } catch (e) { /* 무시 */ }
+}
 let current = null;
 // 단계 안에서 몇 번째까지 했는지 (나갔다 와도 그 자리부터)
 function startAt(S, n) { const k = Math.min(Math.max(0, S.resumeSub || 0), Math.max(0, n - 1)); S.resumeSub = 0; return k; }
@@ -551,7 +563,7 @@ function qaStep(S) {
   function yourTurn() {
     if (!$('area') || $('feedback')) return;
     if (canListen) {
-      $('hint').innerHTML = '이제 말씀하실 차례예요.<br>마이크를 누르거나, 아래에서 골라 주세요.';
+      $('hint').innerHTML = '이제 말씀하실 차례예요.<br>마이크를 누르거나 예시를 골라 주세요.';
       spotlight($('mic'), $('hint'), $('again'), $('qaChoices'));
     } else {
       $('hint').textContent = '아래에서 대답을 고르거나 영어로 적어 주세요.';
@@ -574,9 +586,9 @@ function qaStep(S) {
       </div>
       <button class="ghost again" id="again" type="button">${ICON.sound} 다시 듣기</button>
       <div id="area">
+        <div class="sugg-list" id="qaChoices"></div>
+        <p class="hint say-tip" id="hint" aria-live="polite">클라우디아가 묻고 있어요…</p>
         ${canListen ? `<button class="mic" id="mic" type="button">${ICON.mic} 눌러서 대답하기</button>` : ''}
-        <p class="hint" id="hint" aria-live="polite">클라우디아가 묻고 있어요…</p>
-        <div class="sugg-list bottom" id="qaChoices"></div>
         ${canListen ? '' : `<form id="typed" class="typed"><input id="typedIn" type="text" autocomplete="off" placeholder="영어로 적어도 돼요" aria-label="영어로 적기"><button class="primary" type="submit">보내기</button></form>`}
       </div>
     </section>`);
@@ -590,6 +602,7 @@ function qaStep(S) {
     else if (S.c.talk && S.c.talk.opener_en) prefetch(S.c.talk.opener_en);
     carousel($('qaChoices'), q.choices, {
       action: '이 대답 고르기',
+      soft: true,
       onListen: (c) => { clearSpotlight(); speak(c.en, { rate: S.rate }); },
       onPick: (c) => answered(q, c.en, 'choice', c.ko),
     });

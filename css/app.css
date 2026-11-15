@@ -694,3 +694,28 @@ body.sheet-open { overflow: hidden; }
   .words-q .choice { min-height: 54px; font-size: 21px; }
   .small-listen { min-height: 42px; font-size: 16px; }
 }
+
+/* 홈: 끝낸 단계 누르면 결과 창 */
+.redo-tag { display: none; }
+.modal { position: fixed; inset: 0; z-index: 45; background: rgba(5, 12, 20, .55); display: flex; align-items: flex-end; justify-content: center; padding: 16px; animation: sheetUp .2s ease-out; }
+.modal-card { width: 100%; max-width: 520px; background: var(--paper); border-radius: 24px; padding: 20px; display: flex; flex-direction: column; gap: 10px; text-align: center; margin-bottom: env(safe-area-inset-bottom); }
+.modal-card .big-emoji { font-size: 48px; }
+.modal-score { font-size: 24px; font-weight: 700; }
+.modal-card .big { width: 100%; margin: 0; }
+@media (min-height: 700px) { .modal { align-items: center; } }
+/* 지난 레슨: 접었다 펴기, 길면 안에서 넘겨 보기 */
+.past-toggle { width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: space-between; border: 0; background: transparent; color: var(--ink); font-size: 20px; font-weight: 700; padding: 0; text-align: left; }
+.past-toggle .arrow { font-size: 22px; color: var(--primary); transition: transform .2s; }
+.past-toggle.open .arrow { transform: rotate(180deg); }
+.past-list { max-height: min(46vh, 360px); overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+
+/* 묻고 답하기: 예시 → (빈 곳) → 말풍선 안내 → 맨 아래 마이크 */
+.screen.fit.qa #area { gap: 10px; }
+.screen.fit.qa #qaChoices { margin-top: 6px; }
+.screen.fit.qa .again { min-height: 56px; font-size: 22px; padding: 6px 18px; align-self: flex-start; }
+.say-tip { margin-top: auto !important; align-self: flex-start; position: relative; background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 10px 14px; font-size: 18px; font-weight: 700; text-align: left; max-width: 88%; min-height: 0; }
+.say-tip::after { content: ""; position: absolute; right: 22px; bottom: -11px; width: 18px; height: 18px; background: var(--card); border-right: 2px solid var(--line); border-bottom: 2px solid var(--line); transform: rotate(45deg); }
+.say-tip:empty { display: none; }
+.screen.fit.qa .mic { flex: none; min-height: 88px; font-size: 28px; }
+.sugg-send.soft { align-self: center; width: auto; min-height: 48px; margin: 4px auto 12px; padding: 0 26px; border-radius: 14px; background: transparent; border: 2px solid var(--line); color: var(--ink); font-size: 18px; font-weight: 600; }
+.sugg-send.soft:active { background: var(--tint); }
