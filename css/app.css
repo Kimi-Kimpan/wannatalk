@@ -610,3 +610,19 @@ body.sheet-open { overflow: hidden; }
   .compose-dock .mic-round { width: 74px; height: 74px; }
   .compose-dock .mic-round svg { width: 26px; height: 26px; }
 }
+
+/* 대답한 뒤: 이전 · 다시 대답하기 · 다음 (좁은 화면은 두 줄) */
+.answer-nav { margin-top: auto; flex: none; display: grid; gap: 10px; grid-template-columns: 1fr 2fr; grid-template-areas: "retry retry" "prev next"; }
+.answer-nav .retry-btn { grid-area: retry; }
+.answer-nav .prev-btn { grid-area: prev; }
+.answer-nav .next-btn { grid-area: next; }
+.answer-nav > button { min-height: 64px; border-radius: 18px; font-size: 22px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; }
+.answer-nav .retry-btn svg { width: 26px; height: 26px; }
+.answer-nav .next-btn { font-size: 26px; }
+.answer-nav > button:disabled { opacity: .35; }
+@media (min-width: 600px) {
+  .answer-nav { grid-template-columns: 1fr 1.5fr 1.6fr; grid-template-areas: "prev retry next"; }
+}
+@media (max-height: 720px) { .answer-nav > button { min-height: 56px; font-size: 20px; } .answer-nav .next-btn { font-size: 22px; } }
+.talk2.fb #lower .answer-nav { margin-top: auto; }
+.more-btn { align-self: flex-start; min-height: 40px; padding: 0 2px; font-size: 17px; }

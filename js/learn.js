@@ -442,6 +442,7 @@ const CHEERS = [
 function qaStep(S) {
   const qs = S.c.questions;
   let k = startAt(S, qs.length);
+  const got = {}; // 문제마다 받은 점수 (다시 대답하면 바꿔 셉니다)
 
   // 클라우디아가 말한 뒤: 마이크만 밝게
   function yourTurn() {
@@ -503,6 +504,8 @@ function qaStep(S) {
 
   async function answered(q, text, how, ko = '') {
     clearSpotlight();
+    if (got[k] != null) { S.score.qa[0] -= got[k]; S.score.qa[1] -= 1; delete got[k]; }
+    const before = S.score.qa[0];
     $('area').innerHTML = `<div class="feedback"><p class="label">내가 한 말</p><p class="en" lang="en">${esc(text)}</p><p class="muted">클라우디아가 듣고 있어요…</p></div>`;
     let r;
     if (how === 'choice') {
@@ -522,6 +525,7 @@ function qaStep(S) {
       }
     }
     S.score.qa[1] += 1;
+    got[k] = S.score.qa[0] - before;
     if (!$('area')) return;
     $('bubble').innerHTML = `<p class="en" lang="en">${esc(r.reply_en || 'Good!')}</p><p class="ko">${esc(r.reply_ko || '')}</p>`;
     const showBetter = r.better_en && !sameSentence(r.better_en, text);
@@ -537,11 +541,17 @@ function qaStep(S) {
           </div>` : '<p class="praise">👍 잘 말했어요!</p>'}
         ${r.tip_ko ? `<p class="tip">💡 ${esc(r.tip_ko)}</p>` : ''}
       </div>
-      <button class="big primary bottom" id="nextQ" type="button">다음</button>`;
+      <div class="answer-nav" id="answerNav">
+        <button class="plain prev-btn" id="prevQ" type="button" ${k === 0 ? 'disabled' : ''}>이전</button>
+        <button class="plain retry-btn" id="retryQ" type="button">${ICON.mic} 다시 대답하기</button>
+        <button class="primary next-btn" id="nextQ" type="button">다음</button>
+      </div>`;
     if ($('again')) $('again').hidden = true;
     on('hearBetter', () => emma(r.better_en, S));
     on('nextQ', () => { k++; ask(); });
-    spotlight($('feedback'), $('nextQ'));
+    on('retryQ', () => ask());           // 같은 질문에 다시 대답
+    on('prevQ', () => { if (k > 0) { k--; ask(); } });
+    spotlight($('feedback'), $('answerNav'));
     emma(r.reply_en, S);
     if (showBetter) prefetch(r.better_en);
   }
@@ -563,6 +573,7 @@ function talkStep(S) {
   const history = [{ role: 'emma', en: t.opener_en, ko: t.opener_ko }];
   const fh = FIRST_HELP[S.level] || FIRST_HELP[1];
   let sugg = t.suggestions && t.suggestions.length ? t.suggestions.slice(0, 3) : [{ en: fh[0], ko: fh[1] }];
+  history[0].sugg = sugg; // 클라우디아의 말마다 그때의 대답 예시를 기억해 둡니다 (이전으로 돌아갈 때)
   let slide = 0;
   let left = TALK_SECONDS;
   let ended = false, busy = false, waitingNext = false, timeUp = false;
@@ -712,20 +723,47 @@ function talkStep(S) {
           </div>` : '<p class="praise">👍 잘 말했어요!</p>'}
       </div>
       <p class="muted center-note">다음을 누르면 클라우디아가 대답해요</p>
-      <button class="big primary bottom" id="nextTurn" type="button">다음</button>`;
+      <div class="answer-nav" id="answerNav">
+        <button class="plain prev-btn" id="prevTurn" type="button" ${lines().length < 2 ? 'disabled' : ''}>이전</button>
+        <button class="plain retry-btn" id="retryTurn" type="button">${ICON.mic} 다시 대답하기</button>
+        <button class="primary next-btn" id="nextTurn" type="button">다음</button>
+      </div>`;
     on('hearFix', () => emma(r.fix_en, S));
+    // 다시 대답하기: 방금 내 대답을 지우고 같은 말에 다시 대답
+    on('retryTurn', () => { rewind(1); });
+    // 이전: 클라우디아의 바로 앞 질문으로 돌아가서 다시 대답
+    on('prevTurn', () => { rewind(2); });
     on('nextTurn', () => {
       waitingNext = false;
       dock(true);
       document.querySelector('.talk2')?.classList.remove('fb');
       if (nextSugg.length) sugg = nextSugg.slice(0, 3);
       restoreLower();
-      if (reply) reply.hidden = false;
+      if (reply) { reply.hidden = false; reply.sugg = sugg; }
       if (timeUp) return end();
       if (reply) klaudiaSays(reply.en); else yourTurn();
     });
-    spotlight($('feedback'), $('nextTurn'));
+    spotlight($('feedback'), $('answerNav'));
     if (better) prefetch(r.fix_en);
+  }
+
+  // 대화 되돌리기: steps=1 → 방금 대답만, steps=2 → 클라우디아의 앞 질문까지
+  function rewind(steps) {
+    const pop = () => history.pop();
+    while (history.length && history[history.length - 1].hidden) pop();          // 아직 안 보인 클라우디아 대답
+    if (history.length && history[history.length - 1].role === 'me') { pop(); S.score.talk = Math.max(0, S.score.talk - 1); }
+    if (steps === 2 && lines().length > 1) {
+      pop();                                                                       // 지금 질문
+      if (history.length && history[history.length - 1].role === 'me') { pop(); S.score.talk = Math.max(0, S.score.talk - 1); }
+    }
+    const cur = lines()[lines().length - 1];
+    waitingNext = false;
+    dock(true);
+    document.querySelector('.talk2')?.classList.remove('fb');
+    if (cur && cur.sugg) sugg = cur.sugg;
+    restoreLower();
+    if (timeUp) return end();
+    if (steps === 2 && cur) klaudiaSays(cur.en); else { showLatest(); yourTurn(); }
   }
 
   function showSkip() {

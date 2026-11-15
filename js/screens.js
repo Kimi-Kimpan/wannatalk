@@ -405,11 +405,19 @@ register('home', async () => {
       box.classList.add('has-letter');
       box.innerHTML = `<p class="label">✉️ 오늘 온 편지 ${n > 1 ? `<span class="count-pill">${n}통</span>` : ''}</p>
         <p class="from">${esc(from)}님이 보냈어요</p>
-        <p class="snippet" lang="en">“${esc(letter.body.length > 90 ? letter.body.slice(0, 90) + '…' : letter.body)}”</p>
+        <p class="snippet" lang="en" id="snippet">“${esc(letter.body.length > 90 ? letter.body.slice(0, 90) + '…' : letter.body)}”</p>
+        ${letter.body.length > 90 ? '<button class="link-btn more-btn" id="moreLetter" type="button">더보기 ▾</button>' : ''}
         <div class="row msg-actions">
           <button class="big primary" id="replyMsg" type="button">답장하기</button>
           <button class="big plain" id="writeMsg" type="button">편지함</button>
         </div>`;
+      on('moreLetter', () => {
+        const sn = $('snippet'), mb = $('moreLetter');
+        const open = mb.dataset.open === '1';
+        sn.textContent = open ? `“${letter.body.slice(0, 90)}…”` : `“${letter.body}”`;
+        mb.dataset.open = open ? '' : '1';
+        mb.textContent = open ? '더보기 ▾' : '접기 ▴';
+      });
       on('replyMsg', () => {
         const sender = members.find((m) => m.id === letter.from_id) || { id: letter.from_id, name: from };
         go('message', { to: sender, topic: 'reply', replyTo: letter });
