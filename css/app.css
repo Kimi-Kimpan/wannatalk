@@ -873,3 +873,8 @@ body.sheet-open { overflow: hidden; }
 .screen.fit.qa #area > .mic { margin-top: 8px; }
 .screen.fit.qa #area > .say-tip + .mic { margin-top: 0; }
 .screen.fit.tighter.qa #area > .mic { margin-top: 12px; }
+/* 동그란 말하기 버튼: 파란색으로 가득 채워 화면의 주인공으로 */
+.mic-round { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); font-weight: 800; box-shadow: var(--shadow, 0 4px 14px rgba(0,0,0,.25)); }
+.mic-round.recording { background: var(--bad); border-color: var(--bad); color: #fff; }
+.mic-round.thinking { background: var(--card); border-color: var(--line); color: var(--ink-soft); box-shadow: none; }
+.mic-round:disabled { opacity: .55; }

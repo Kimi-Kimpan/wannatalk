@@ -329,6 +329,7 @@ async function writeMessage(to, topic, replyTo) {
     if (options.length) {
       carousel($('opts'), options, {
         action: t.pick,
+        soft: true,   // 마이크가 주인공으로 보이게, 예시 버튼은 차분하게
         onListen: (x) => speak(x.en, { rate: 0.85 }),
         onPick: (x) => { lines.push({ en: x.en, ko: x.ko || '', step: si }); next(); },
       });
