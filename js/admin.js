@@ -146,6 +146,7 @@ async function afterLogin() {
 }
 
 let removed = []; // 삭제해서 보관 중인 계정
+let isOwner = false, adminIds = {}; // 대표 관리자만 권한을 주고 뺄 수 있어요
 const KEEP_DAYS = 30;
 async function loadUsers() {
   root.innerHTML = '<p class="muted">사용자 불러오는 중…</p>';
@@ -157,6 +158,10 @@ async function loadUsers() {
   removed = (data || []).filter((u) => delAt[u.id]).map((u) => ({ ...u, deleted_at: delAt[u.id] }));
   users = (data || []).filter((u) => !delAt[u.id]);
   if (selected && !users.some((u) => u.id === selected)) selected = null;
+  // 대표 관리자에게만 관리자 목록이 보여요
+  const al = await sb.rpc('admin_list').then((r) => (r.error ? null : r.data || []), () => null);
+  isOwner = !!al;
+  adminIds = Object.fromEntries((al || []).map((a) => [a.user_id, a.owner ? 'owner' : 'admin']));
   render();
   loadSignup();
   loadUsage();
@@ -303,7 +308,7 @@ function row(u) {
   const pct = Math.min(100, Math.round((done / TOTAL_DAYS) * 100));
   const score = u.avg_score == null ? '-' : Math.round(Number(u.avg_score) * 100) + '점';
   return `<tr data-id="${esc(u.id)}" class="${u.id === selected ? 'sel' : ''}">
-    <td class="who"><b>${esc(u.name || '(이름 없음)')}</b><small>${esc(u.email)}</small></td>
+    <td class="who"><b>${esc(u.name || '(이름 없음)')}</b>${adminIds[u.id] ? ` <span class="pill">${adminIds[u.id] === 'owner' ? '대표 관리자' : '관리자'}</span>` : ''}<small>${esc(u.email)}</small></td>
     <td>${learner ? '학습자' : u.role === 'friend' ? '가족' : '-'}</td>
     <td class="num">${learner ? u.level + '단계' : '-'}</td>
     <td>${learner ? `<span class="bar"><span style="width:${pct}%"></span></span><span class="num">${done}/${TOTAL_DAYS}</span>` : '-'}</td>
@@ -341,6 +346,7 @@ async function openUser(id) {
       <div class="row">
         <button class="btn" id="copyMemoir" type="button">자서전 자료 복사</button>
         <button class="btn primary" id="dlMemoir" type="button">자서전 자료 내려받기 (.md)</button>
+        ${isOwner && adminIds[id] !== 'owner' ? `<button class="btn" id="adminToggle" type="button">${adminIds[id] ? '관리자 권한 빼기' : '관리자 권한 주기'}</button>` : ''}
         <button class="btn" id="resetUser" type="button">처음 상태로 되돌리기</button>
         <button class="btn danger" id="delUser" type="button">계정 삭제</button>
       </div>
@@ -376,6 +382,14 @@ async function openUser(id) {
   </section>`;
 
   backgroundBox(id);
+  if ($('adminToggle')) $('adminToggle').addEventListener('click', async () => {
+    const b = $('adminToggle');
+    if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = adminIds[id] ? '한 번 더 누르면 권한을 빼요' : '한 번 더 누르면 관리자가 돼요'; return; }
+    b.disabled = true;
+    const { error } = await sb.rpc(adminIds[id] ? 'admin_revoke' : 'admin_grant', { uid: id });
+    if (error) { b.disabled = false; b.textContent = '안 됐어요. 다시 눌러 주세요'; delete b.dataset.sure; return; }
+    loadUsers();
+  });
   $('resetUser').addEventListener('click', () => { $('resetConfirm').hidden = false; $('delConfirm').hidden = true; });
   $('resetNo').addEventListener('click', () => { $('resetConfirm').hidden = true; });
   $('resetYes').addEventListener('click', async () => {
@@ -394,7 +408,7 @@ async function openUser(id) {
     if (error) {
       $('delYes').disabled = false;
       $('delMsg').textContent = /self/.test(error.message) ? '지금 로그인한 내 계정은 삭제할 수 없어요.'
-        : /cannot_delete_admin/.test(error.message) ? '관리자 계정은 삭제할 수 없어요.' : '삭제하지 못했어요. 다시 눌러 주세요.';
+        : /cannot_delete_admin/.test(error.message) ? '관리자 계정은 대표 관리자만 삭제할 수 있어요. (대표 관리자 계정은 삭제할 수 없어요)' : '삭제하지 못했어요. 다시 눌러 주세요.';
       return;
     }
     selected = null;
