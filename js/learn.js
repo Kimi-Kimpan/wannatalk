@@ -208,7 +208,7 @@ async function letterStep(S) {
     const pts = plan && Array.isArray(plan.points) ? plan.points.filter((x) => x && x.ko && Array.isArray(x.body) && x.body.some(ok)) : [];
     const list = pts.map((x) => ({ ko: x.ko, options: x.body.filter(ok).slice(0, 3) }));
     const generic = [
-      { ko: `${fromName}님 편지에 대한 내 마음을 한마디 전해 봐요.`, options: (plan && Array.isArray(plan.body) ? plan.body : []).filter(ok).slice(0, 3) },
+      { ko: `${fromName}님이 편지를 보냈어요.`, options: (plan && Array.isArray(plan.body) ? plan.body : []).filter(ok).slice(0, 3) },
       { ko: '마지막으로 짧게 인사해요.', options: (plan && Array.isArray(plan.close) ? plan.close : []).filter(ok).slice(0, 3) },
     ];
     for (const g of generic) if (list.length < 2 && g.options.length) list.push(g);
@@ -294,19 +294,38 @@ async function letterStep(S) {
     });
   }
 
-  // 낱말 단계 ①: 예시를 넘겨 보고 만들 문장 고르기
+  // 한국어로 말해도 영어로 바꿔 주는 마이크 (낱말 단계와 말하기 단계가 함께 써요)
+  function bindVoice(n) {
+    on('mic', async () => {
+      const said = await hear($('mic'), $('hint'), { listening: '듣고 있어요… 한국어로 말해도 돼요', lang: 'auto', silenceMs: 2200 });
+      if (!said || !said[0] || !$('hint')) return;
+      $('hint').textContent = '영어로 바꾸고 있어요…';
+      try {
+        const r = await api.ai('compose', { ...base, mode: 'voice', step: 'body', said: said[0], draft: parts.flatMap((p0) => p0.items.map((i) => i.en)) });
+        if (!r || !r.en) throw new Error('empty');
+        compare(n, { en: r.en, ko: r.ko || '', said: said[0] });
+      } catch (e) { if ($('hint')) $('hint').textContent = '바꾸지 못했어요. 한 번 더 말씀해 주세요.'; }
+    });
+  }
+  const micBtn = () => (canListen ? `<button class="mic-round" id="mic" type="button" aria-label="말하기">${ICON.mic}<span>말하기</span></button>` : '<span></span>');
+
+  // 낱말 단계 ①: 예시를 골라 낱말로 만들거나, 마이크로 직접 말하기
   function tilesPick(n) {
     const x = steps[n];
-    frame(n, `<div class="sugg-list" id="opts"></div>
-      <div class="compose-dock bottom">${backBtn(n)}<span></span><button class="round-ghost" id="skipStep" type="button">건너뛰기</button></div>`,
-      { bubble: `${ask(x)}<br><small>예시를 옆으로 넘겨 보고, 고른 문장을 낱말로 만들어요.</small>` });
+    frame(n, `<p class="pick-tip">아래 예시를 골라 낱말로 만들거나, 직접 말해주세요</p>
+      <div class="sugg-list" id="opts"></div>
+      <p class="hint" id="hint" aria-live="polite"></p>
+      <div class="compose-dock bottom">${backBtn(n)}${micBtn()}<button class="round-ghost" id="skipStep" type="button">건너뛰기</button></div>`,
+      { bubble: ask(x) });
     bindBack(n);
     on('skipStep', () => (backTo ? (backTo = false, summary()) : n + 1 < steps.length ? runStep(n + 1) : summary()));
     carousel($('opts'), x.options, {
       action: '이 문장 만들기',
+      soft: true,
       onListen: (o) => speak(o.en, { rate: S.rate }),
       onPick: (o) => tilesBuild(n, o),
     });
+    bindVoice(n);
   }
   // 낱말 단계 ②: 조각(최대 4개)을 순서대로 눌러 만들기
   function chunks(sentence) {
@@ -348,13 +367,11 @@ async function letterStep(S) {
   // 말하기 단계: 예시 카드 안에 '예시 쓰기', 아래에 이전 단계 · 마이크 · 건너뛰기
   function speakStep(n) {
     const x = steps[n];
-    frame(n, `<div class="sugg-list" id="opts"></div>
+    frame(n, `<p class="pick-tip">아래 예시를 고르거나, 직접 말해주세요 · 한국어로 말해도 돼요</p>
+      <div class="sugg-list" id="opts"></div>
       <p class="hint" id="hint" aria-live="polite"></p>
-      <div class="compose-dock bottom">
-        ${backBtn(n)}
-        ${canListen ? `<button class="mic-round" id="mic" type="button" aria-label="말하기">${ICON.mic}<span>말하기</span></button>` : '<span></span>'}
-        <button class="round-ghost" id="skipStep" type="button">건너뛰기</button>
-      </div>`, { bubble: `${ask(x)}<br><small>한국어로 말해도 영어로 바꿔 드려요.</small>` });
+      <div class="compose-dock bottom">${backBtn(n)}${micBtn()}<button class="round-ghost" id="skipStep" type="button">건너뛰기</button></div>`,
+      { bubble: ask(x) });
     bindBack(n);
     on('skipStep', () => (backTo ? (backTo = false, summary()) : n + 1 < steps.length ? runStep(n + 1) : summary()));
     carousel($('opts'), x.options, {
@@ -363,16 +380,7 @@ async function letterStep(S) {
       onListen: (o) => speak(o.en, { rate: S.rate }),
       onPick: (o) => done(n, { en: o.en, ko: o.ko || '' }),
     });
-    on('mic', async () => {
-      const said = await hear($('mic'), $('hint'), { listening: '듣고 있어요… 한국어로 말해도 돼요', lang: 'auto', silenceMs: 2200 });
-      if (!said || !said[0] || !$('hint')) return;
-      $('hint').textContent = '영어로 바꾸고 있어요…';
-      try {
-        const r = await api.ai('compose', { ...base, mode: 'voice', step: 'body', said: said[0], draft: parts.flatMap((p0) => p0.items.map((i) => i.en)) });
-        if (!r || !r.en) throw new Error('empty');
-        compare(n, { en: r.en, ko: r.ko || '', said: said[0] });
-      } catch (e) { if ($('hint')) $('hint').textContent = '바꾸지 못했어요. 한 번 더 말씀해 주세요.'; }
-    });
+    bindVoice(n);
   }
   function compare(n, x) {
     const korean = hasHangul(x.said);
@@ -388,7 +396,7 @@ async function letterStep(S) {
         <button class="mic plain mid" id="again" type="button">${ICON.mic} 다시 말하기</button>
         <button class="primary mid" id="use" type="button">이 문장 사용하기</button>
       </div>`, { compact: true });
-    on('again', () => speakStep(n));
+    on('again', () => runStep(n));
     on('use', () => done(n, { en: x.en, ko: x.ko }));
   }
 

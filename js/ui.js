@@ -209,6 +209,9 @@ export async function hear(mic, hintEl, { listening = '듣고 있어요… 말�
   const say = (t) => { if (hintEl && hintEl.isConnected) hintEl.textContent = t; };
   micOn(mic);
   say(listening);
+  // 말하는 동안과 알아듣는 동안에는 '다음'을 누를 수 없어요 (결과가 나오면 다시 켜져요)
+  const held = [...document.querySelectorAll('#app .nav .next')].filter((b) => !b.disabled);
+  held.forEach((b) => { b.disabled = true; });
   try {
     return await listen({
       ...opts,
@@ -226,6 +229,7 @@ export async function hear(mic, hintEl, { listening = '듣고 있어요… 말�
     return null;
   } finally {
     micOff(mic);
+    held.forEach((b) => { if (b.isConnected) b.disabled = false; });
   }
 }
 

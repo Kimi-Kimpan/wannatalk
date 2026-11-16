@@ -693,7 +693,7 @@ Return JSON:
   "body":  [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ],
   "close": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]${b.reply_to ? `,
   "letter_ko": "natural Korean translation of the message being replied to",
-  "points": [ {"ko": "one thing in their message worth answering, as ONE full natural Korean sentence saying what they wrote (e.g. '두 사람도 오늘은 편히 쉬면 좋겠다고 했어요.')", "body": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]} ]   // one point per distinct thing in the message (1 to 5 points), each with 3 different short one-sentence answers (max 8 words)` : ""}
+  "points": [ {"ko": "one thing in their message worth answering, as ONE full natural Korean sentence that starts with the SENDER's name as the subject and says what the sender wrote: '<sender>님이 ...라고 했어요.' (e.g. 'Klara님이 두 사람도 오늘은 편히 쉬면 좋겠다고 했어요.'). Never write it from the learner's side and never leave out who said it.", "body": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]} ]   // one point per distinct thing in the message (1 to 5 points), each with 3 different short one-sentence answers (max 8 words)` : ""}
 }
 "ko" is the natural Korean meaning (polite). The three options in each part should be clearly different.`;
   return await gemini(system, prompt, 0.8, b.reply_to ? 2200 : 1200, m);
