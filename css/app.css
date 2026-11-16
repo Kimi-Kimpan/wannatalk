@@ -826,3 +826,7 @@ body.sheet-open { overflow: hidden; }
 .letter-summary .sum-text p.muted { font-size: 15px; }
 .letter-summary.tight .sum-btns .ghost, .letter-summary.tighter .sum-btns .ghost { min-height: 34px; }
 .letter-summary.tighter .sum-text p { font-size: 17px; }
+/* 설정: 접었다 펴는 칸 */
+.fold .fold-toggle small { font-size: 16px; font-weight: 500; }
+.fold .fold-body { margin-top: 10px; }
+.fold .fold-scroll { max-height: min(50vh, 420px); overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }

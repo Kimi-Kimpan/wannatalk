@@ -525,8 +525,10 @@ register('settings', async () => {
       <button class="plain mid" type="submit">이름 저장</button>
     </form>
 
-    <form class="panel form" id="idForm" novalidate>
-      <h2>아이디와 비밀번호</h2>
+    <div class="panel fold">
+      <button class="past-toggle fold-toggle" type="button" aria-expanded="false" data-fold="idBody">
+        <span>아이디와 비밀번호${p.username ? ` <small class="muted">· ${esc(p.username)}</small>` : ''}</span><span class="arrow" aria-hidden="true">▾</span></button>
+    <form class="form fold-body" id="idForm" novalidate hidden data-body="idBody">
       <p class="muted">${p.username ? `지금 아이디: <b>${esc(p.username)}</b>. 비밀번호를 바꾸려면 새로 적어 주세요.` : '만들어 두면 다음부터 메일 없이 아이디와 비밀번호로 들어올 수 있어요. 지금까지 공부한 내용은 그대로 이어져요.'}</p>
       <label for="newId">아이디 <span class="muted">(한글·영문·숫자 2~20자)</span></label>
       <input id="newId" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="20" value="${esc(p.username || '')}">
@@ -537,6 +539,7 @@ register('settings', async () => {
       <p class="msg" id="idMsg" role="status"></p>
       <button class="big primary" type="submit" id="idSave">${p.username ? '저장하기' : '아이디 만들기'}</button>
     </form>
+    </div>
 
     <div class="panel">
       <h2>공부 단계</h2>
@@ -561,9 +564,10 @@ register('settings', async () => {
         : '<p class="muted">크롬 오른쪽 위 ⋮ 메뉴 → <b>홈 화면에 추가</b>를 누르세요. 이미 추가했다면 그대로 쓰시면 돼요.</p>'}
     </div>
 
-    <div class="panel">
-      <h2>주고받은 편지</h2>
-      <div id="letters" class="letters"><p class="muted">불러오는 중…</p></div>
+    <div class="panel fold">
+      <button class="past-toggle fold-toggle" type="button" aria-expanded="false" data-fold="lettersBody">
+        <span>주고받은 편지 <small class="muted" id="lettersCount"></small></span><span class="arrow" aria-hidden="true">▾</span></button>
+      <div id="letters" class="letters fold-body fold-scroll" hidden data-body="lettersBody"><p class="muted">불러오는 중…</p></div>
     </div>
 
     <div id="adminBox"></div>
@@ -575,6 +579,14 @@ register('settings', async () => {
   </section>`);
 
   on('back', () => go('home'));
+  // 접었다 펴는 칸 (눌러야 열려요)
+  document.querySelectorAll('.fold-toggle').forEach((t) => t.addEventListener('click', () => {
+    const body = document.querySelector(`[data-body="${t.dataset.fold}"]`);
+    body.hidden = !body.hidden;
+    t.classList.toggle('open', !body.hidden);
+    t.setAttribute('aria-expanded', String(!body.hidden));
+    if (!body.hidden) t.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }));
   $('nameForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = $('nameIn').value.trim().slice(0, 40);
@@ -645,6 +657,7 @@ register('settings', async () => {
     const names = Object.fromEntries(members.map((m) => [m.id, m.name]));
     const box = $('letters');
     if (!box) return;
+    if ($('lettersCount')) $('lettersCount').textContent = letters.length ? `· ${letters.length}통` : '';
     box.innerHTML = letters.length
       ? letters.map((l) => `<div class="letter-item ${l.from_id === state.user.id ? 'mine' : ''}">
           <div class="from">${l.from_id === state.user.id ? '내가 보냄' : esc(names[l.from_id] || '가족') + '님이 보냄'} · <span class="muted">${new Date(l.created_at).toLocaleDateString('ko-KR')}</span></div>
