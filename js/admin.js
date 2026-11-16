@@ -318,6 +318,7 @@ async function openUser(id) {
         <div class="fact"><div class="label">이야기 노트</div><div class="value num">${N.length}개</div></div>
         <div class="fact"><div class="label">자서전 기록</div><div class="value num">${E.length}개</div></div>
       </div>
+      <div class="bg-box" id="bgBox"><h3>배경</h3><p class="muted">불러오는 중…</p></div>
       <div class="chart"><h3>하루 점수 추이</h3>${scoreChart(P)}</div>
       <div class="tabs" role="tablist">
         <button class="tab" role="tab" aria-selected="true" data-tab="memoir" type="button">자서전 자료</button>
@@ -327,6 +328,8 @@ async function openUser(id) {
       <div id="tabBody"></div>
     </div>
   </section>`;
+
+  backgroundBox(id);
 
   const bodies = {
     memoir: () => memoirHtml(E),
@@ -358,6 +361,49 @@ async function openUser(id) {
     document.body.appendChild(a);
     a.click();
     a.remove();
+  });
+}
+
+// 배경: 클라우디아가 이 사용자에게 맞는 주제를 고르도록 붙이는 태그와 메모 ------------------
+const BG_IDEAS = ['60대', '70대', '남성', '여성', '직장인', '은퇴', '주부', '손주 있음', '혼자 삶', '여행 좋아함', '요리 좋아함', '등산 좋아함', '해외에 가족 있음'];
+async function backgroundBox(id) {
+  const box = $('bgBox');
+  if (!box) return;
+  const { data, error } = await sb.from('profiles').select('background_tags,background_note').eq('id', id).maybeSingle();
+  if (selected !== id || !$('bgBox')) return;
+  if (error) { box.innerHTML = '<h3>배경</h3><p class="empty">아직 쓸 수 없어요. (데이터베이스 준비가 필요해요)</p>'; return; }
+  let tags = (data && data.background_tags) || [];
+  const note = (data && data.background_note) || '';
+  box.innerHTML = `<h3>배경 <span class="muted">· 클라우디아가 이 사용자에게 맞는 대화 주제를 고를 때 참고해요</span></h3>
+    <div class="bg-tags" id="bgTags"></div>
+    <form class="bg-add" id="bgAdd"><input id="bgIn" type="text" maxlength="40" placeholder="태그 적기 (예: 병원 근무, 손주 2명)" aria-label="새 태그"><button class="btn" type="submit">추가</button></form>
+    <div class="bg-ideas" id="bgIdeas"></div>
+    <label class="label" for="bgNote">메모 (자유롭게, 한국어나 영어)</label>
+    <textarea id="bgNote" rows="3" maxlength="600" placeholder="예: 딸이 캐나다에 살아서 손주와 영어로 이야기하고 싶어 해요.">${esc(note)}</textarea>
+    <div class="row"><button class="btn primary" id="bgSave" type="button">배경 저장</button><span class="muted" id="bgMsg" role="status"></span></div>`;
+  const draw = () => {
+    $('bgTags').innerHTML = tags.length
+      ? tags.map((t, i) => `<span class="bg-tag">${esc(t)}<button type="button" data-i="${i}" aria-label="${esc(t)} 지우기">×</button></span>`).join('')
+      : '<span class="muted">아직 태그가 없어요. 비어 있으면 클라우디아는 직업·가족을 짐작하지 않고 일반적인 질문만 해요.</span>';
+    $('bgTags').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { tags.splice(Number(b.dataset.i), 1); draw(); dirty(); }));
+    $('bgIdeas').innerHTML = BG_IDEAS.filter((t) => !tags.includes(t)).map((t) => `<button class="bg-idea" type="button">+ ${esc(t)}</button>`).join('');
+    $('bgIdeas').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => add(b.textContent.slice(2))));
+  };
+  const dirty = () => { $('bgMsg').textContent = '저장하지 않은 변경이 있어요'; };
+  const add = (t) => {
+    t = String(t || '').trim().slice(0, 40);
+    if (!t || tags.includes(t) || tags.length >= 20) return;
+    tags = tags.concat(t); draw(); dirty();
+  };
+  draw();
+  $('bgAdd').addEventListener('submit', (e) => { e.preventDefault(); add($('bgIn').value); $('bgIn').value = ''; });
+  $('bgNote').addEventListener('input', dirty);
+  $('bgSave').addEventListener('click', async () => {
+    $('bgSave').disabled = true;
+    const { error: err } = await sb.rpc('admin_set_background', { uid: id, tags, note: $('bgNote').value.trim() });
+    if (!$('bgSave')) return;
+    $('bgSave').disabled = false;
+    $('bgMsg').textContent = err ? '저장하지 못했어요. 다시 눌러 주세요.' : '저장했어요. 다음 레슨·대화부터 적용돼요.';
   });
 }
 

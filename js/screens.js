@@ -2,7 +2,7 @@
 import { state, register, go, mount, on, $, esc, today, loading, errorScreen, avatar } from './ui.js';
 import { prepareDay } from './learn.js';
 import * as api from './api.js';
-import { TOPICS, topicForDay, cycleForDay, LEVEL_NAMES } from './content.js';
+import { TOPICS, topicForDay, cycleForDay, LEVEL_NAMES, personalizeTopics } from './content.js';
 import { TOTAL_DAYS } from './config.js';
 
 // 첫 화면과 로그인 ---------------------------------------------------------------------
@@ -321,6 +321,7 @@ function gauge(done, total) {
 
 register('home', async () => {
   const p = state.profile;
+  personalizeTopics(p);
   const doneToday = p.last_done_date === today();
   const day = p.day;
   const doneDays = Math.max(0, day - 1);

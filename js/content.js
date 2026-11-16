@@ -13,6 +13,15 @@ export const TOPICS = [
   { id: 'heart',       ko: '마음과 생각',       emoji: '💭' },
 ];
 
+// 사용자 배경에 맞춰 주제 이름을 바꿔요 (스웨덴·공항 이야기는 해당하는 사람에게만)
+const ORIGINAL = { sweden: { ko: '스웨덴과 클라라', emoji: '❄️' }, work: { ko: '지금 하는 일', emoji: '🧑‍🦽' } };
+export function personalizeTopics(profile) {
+  const all = `${((profile && profile.background_tags) || []).join(' ')} ${(profile && profile.background_note) || ''}`.toLowerCase();
+  const set = (id, v) => Object.assign(TOPICS.find((t) => t.id === id), v);
+  set('sweden', /sweden|스웨덴|clara|클라라|klara/.test(all) ? ORIGINAL.sweden : { ko: '먼 곳과 보고 싶은 사람', emoji: '✈️' });
+  set('work', /airport|공항/.test(all) ? ORIGINAL.work : { ko: '지금 하는 일', emoji: '💼' });
+}
+
 export function topicForDay(day) {
   return TOPICS[(day - 1) % TOPICS.length];
 }

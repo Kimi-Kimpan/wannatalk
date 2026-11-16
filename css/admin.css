@@ -111,3 +111,18 @@ tbody tr:last-child td { border-bottom: 0; }
 .usage-grid .sub { font-size: 13px; color: var(--ink-soft); }
 .kv { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .empty { padding: 14px 16px; }
+/* 사용자 배경 (태그와 메모) */
+.bg-box { border: 1px solid var(--line, #d5dbe5); border-radius: 12px; padding: 14px 16px; margin: 14px 0; display: flex; flex-direction: column; gap: 10px; }
+.bg-box h3 { margin: 0; }
+.bg-box h3 .muted { font-weight: 400; font-size: .85em; }
+.bg-tags { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; align-items: center; }
+.bg-tag { display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px 4px 12px; border-radius: 999px; background: color-mix(in srgb, var(--primary, #0B4F9E) 14%, transparent); font-weight: 700; }
+.bg-tag button { border: 0; background: transparent; color: inherit; font-size: 18px; line-height: 1; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; }
+.bg-tag button:hover { background: color-mix(in srgb, currentColor 15%, transparent); }
+.bg-add { display: flex; gap: 8px; }
+.bg-add input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--line, #d5dbe5); border-radius: 8px; font: inherit; background: transparent; color: inherit; }
+.bg-ideas { display: flex; flex-wrap: wrap; gap: 6px; }
+.bg-idea { border: 1px dashed var(--line, #b9c2d0); background: transparent; color: inherit; border-radius: 999px; padding: 3px 10px; font: inherit; font-size: .9em; cursor: pointer; opacity: .8; }
+.bg-idea:hover { opacity: 1; }
+.bg-box textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line, #d5dbe5); border-radius: 8px; font: inherit; background: transparent; color: inherit; resize: vertical; }
+.bg-box .row { display: flex; align-items: center; gap: 12px; }

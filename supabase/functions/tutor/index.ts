@@ -34,10 +34,32 @@ const TOPICS: Record<string, string> = {
   heart: "Feelings and thoughts: health, what makes him happy, gratitude, advice he would give to young people.",
 };
 
-const LEARNER =
-  "The learner is a Korean man in his 70s. He works at an airport, helping passengers who use wheelchairs. " +
-  "His child's girlfriend, Clara, lives in northern Sweden and does not speak Korean; he wants to chat with her in English. " +
-  "He is a beginner, reads Korean comfortably, and uses a phone. Be warm, patient and respectful. Never be childish.";
+// 학습자 소개: 관리자가 사용자마다 붙여 둔 배경(태그·메모)으로 만듭니다. 요청마다 서버가 직접 읽어 옵니다.
+const LEARNER_BASE =
+  "The learner is a Korean adult learning English conversation, reads Korean comfortably, and uses a phone. " +
+  "Be warm, patient and respectful. Never be childish. " +
+  "(The instructions below say 'he/him' for the learner; follow the background for who the person really is.)";
+function learnerOf(b: any): string {
+  const bg = b && b._bg;
+  const tags = bg && Array.isArray(bg.tags) ? bg.tags.map((t: any) => clip(t, 40)).filter(Boolean).slice(0, 20) : [];
+  const note = bg ? clip(bg.note, 600) : "";
+  if (!tags.length && !note) {
+    return `${LEARNER_BASE} Nothing is known yet about this learner's job, age or family: do NOT assume any (no airport, no particular relatives or countries). Ask general, everyday questions and learn about the person from the answers.`;
+  }
+  return `${LEARNER_BASE} Background of THIS learner (set by the family; choose subjects, examples and questions that fit it): ` +
+    `${tags.length ? `tags: ${tags.join("; ")}. ` : ""}${note ? `note: ${note}` : ""}`;
+}
+function topicText(b: any, topic: string): string {
+  const bg = b && b._bg;
+  const all = `${bg && Array.isArray(bg.tags) ? bg.tags.join(" ") : ""} ${bg ? bg.note || "" : ""}`.toLowerCase();
+  if (topic === "sweden" && !/sweden|스웨덴|clara|클라라|klara/.test(all)) {
+    return "Faraway places and people: a country or city he would like to visit, and family or friends who live far away.";
+  }
+  if (topic === "work" && !/airport|공항/.test(all)) {
+    return "His work or main daily activity now (a job, housework, volunteering, study or retired life), following the background if it says what he does.";
+  }
+  return TOPICS[topic];
+}
 
 const SAY_RULE =
   "'say' is a Korean Hangul pronunciation guide for the English, written how a Korean speaker would read it aloud (e.g. 'Nice to meet you' -> '나이스 투 밋 츄').";
@@ -262,10 +284,10 @@ async function gemini(system: string, prompt: string, temperature = 0.7, maxToke
 async function makePack(b: any, m?: Meter) {
   const level = levelOf(b.level);
   const topic = TOPICS[b.topic] ? b.topic : "me";
-  const system = `You are Klaudia, a friendly English conversation teacher. ${LEARNER} Reply with JSON only.`;
+  const system = `You are Klaudia, a friendly English conversation teacher. ${learnerOf(b)} Reply with JSON only.`;
   const prompt = `Create today's English lesson.
 
-Topic: ${TOPICS[topic]}
+Topic: ${topicText(b, topic)}
 Cycle: ${Number(b.cycle) || 1} (each new cycle on the same topic should go deeper and use new questions; do not repeat earlier lessons)
 ${LEVELS[level]}
 Learner's name: ${clip(b.name, 40) || "the learner"}
@@ -297,7 +319,7 @@ async function checkAnswer(b: any, m?: Meter) {
   const history = (Array.isArray(b.history) ? b.history.slice(-6) : [])
     .map((x: any) => `Klaudia: ${clip(x && x.q, 200)}\nLearner: ${clip(x && x.a, 200)}`).join("\n");
   const ideas = (Array.isArray(b.ideas) ? b.ideas.slice(0, 3) : []).map((x: any) => `- ${clip(x, 200)}`).join("\n");
-  const system = `You are Klaudia, a kind English teacher having one continuous spoken conversation. ${LEARNER} Reply with JSON only.`;
+  const system = `You are Klaudia, a kind English teacher having one continuous spoken conversation. ${learnerOf(b)} Reply with JSON only.`;
   const prompt = `${history ? `Conversation so far:\n${history}\n\n` : ""}Klaudia asked: "${clip(b.question, 300)}"
 The learner answered (from speech recognition or tapping, may have errors): "${clip(b.answer, 300)}"
 ${b.tapped ? "He tapped a suggested answer, so it is already correct: good is true, better_en repeats his answer, tip_ko is empty." : ""}
@@ -336,7 +358,7 @@ async function chatTurn(b: any, m?: Meter) {
     .map((m: any) => `${m.role === "me" ? "Learner" : "Klaudia"}: ${clip(m.en, 300)}`)
     .join("\n");
   const system =
-    `You are Klaudia, a warm English conversation partner in a short spoken chat. ${LEARNER} ` +
+    `You are Klaudia, a warm English conversation partner in a short spoken chat. ${learnerOf(b)} ` +
     `Speak simply. Ask one question at a time. Keep each line under 20 words. Reply with JSON only.`;
   const SUGG = `"suggestions": [ {"en": "...", "ko": "..."} ]   // 3 different short answers the learner could say next, at his level, sounding like his own life (empty if ending)`;
   if (b.suggest_only) {
@@ -353,7 +375,7 @@ Return JSON:
     return await gemini(system, p0, 0.7, 500, m);
   }
   const prompt = `Scene: ${clip(b.scene, 200)}
-Topic: ${TOPICS[topic]}
+Topic: ${topicText(b, topic)}
 ${LEVELS[level]}
 What we know about him:
 ${notesText(Array.isArray(b.notes) ? b.notes.slice(0, 15) : [])}
@@ -380,7 +402,7 @@ Return JSON:
 // 편지 읽기 도우미
 async function readLetter(b: any, m?: Meter) {
   const level = levelOf(b.level);
-  const system = `You help a Korean learner read a short English message from family. ${LEARNER} Reply with JSON only.`;
+  const system = `You help a Korean learner read a short English message from family. ${learnerOf(b)} Reply with JSON only.`;
   const prompt = `Message from ${clip(b.from_name, 40) || "Clara"}:
 """${clip(b.text, 1500)}"""
 ${LEVELS[level]}
@@ -400,7 +422,7 @@ Rules: ${SAY_RULE}`;
 // 답장 다듬기
 async function polishReply(b: any, m?: Meter) {
   const level = levelOf(b.level);
-  const system = `You are Klaudia, a kind English teacher helping a learner write a reply to family. ${LEARNER} Reply with JSON only.`;
+  const system = `You are Klaudia, a kind English teacher helping a learner write a reply to family. ${learnerOf(b)} Reply with JSON only.`;
   const prompt = `The message he received:
 """${clip(b.letter, 1500)}"""
 His draft reply: "${clip(b.draft, 600)}"
@@ -614,8 +636,8 @@ async function compose(b: any, m?: Meter) {
   const topic = COMPOSE_TOPICS[b.topic] ? b.topic : "free";
   const who = `Writer: ${clip(b.from_name, 40) || "the writer"}. Reader: ${clip(b.to_name, 40) || "the reader"}.`;
   const rule = writerLearner
-    ? `The writer is a Korean man in his 70s learning English. Every English line must be short and easy for him to read aloud. ${LEVELS[level]}`
-    : `The reader is a Korean beginner learner of English in his 70s, so every English line must be short, warm and easy to read. ${LEVELS[level]}`;
+    ? `The writer is a Korean learner of English. ${learnerOf(b)} Every English line must be short and easy for the writer to read aloud. ${LEVELS[level]}`
+    : `The reader is a Korean beginner learner of English, so every English line must be short, warm and easy to read. ${LEVELS[level]}`;
   const draft = Array.isArray(b.draft) ? b.draft.slice(0, 4).map((x: unknown) => clip(x, 200)).join(" ") : "";
   const replyTo = b.reply_to ? `\nThe message being replied to: """${clip(b.reply_to, 800)}"""` : "";
   const system = `You are Klaudia, helping someone write a very short, warm message to family. ${rule} The whole message is only 2 or 3 short sentences. Reply with JSON only.`;
@@ -754,6 +776,16 @@ Deno.serve(async (req) => {
     b = await req.json();
   } catch {
     return json({ error: "bad json" }, 400);
+  }
+
+  // 이 사용자의 배경은 서버가 직접 읽어 옵니다 (앱에서 보낸 값은 쓰지 않아요)
+  delete b._bg;
+  if (b && !["tts", "stt", "ping"].includes(b.action)) {
+    try {
+      const db = createClient(url, key, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${token}` } } });
+      const { data } = await db.from("profiles").select("background_tags,background_note").eq("id", user.id).maybeSingle();
+      if (data) b._bg = { tags: data.background_tags || [], note: data.background_note || "" };
+    } catch { /* 배경 없이 진행 */ }
   }
 
   const meter: Meter = [];
