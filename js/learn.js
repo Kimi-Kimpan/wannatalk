@@ -199,6 +199,7 @@ async function letterStep(S) {
 
   const ok = (x) => x && typeof x.en === 'string' && x.en.trim();
   const nWords = (x) => x.en.trim().split(/\s+/).length;
+  const MAX_LINES = 5; // 편지 한 통에 들어가는 문장 수 (읽는 사람도 쓰는 사람도 지치지 않게)
   let steps = [];   // [{ko, options:[{en,ko}], mode:'tiles'|'speak'}]
   let parts = [];   // 단계마다 쓴 문장 [{items:[{en,ko}]}]
   let backTo = false; // ＋로 들어왔으면 끝나고 요약으로
@@ -213,7 +214,7 @@ async function letterStep(S) {
     ];
     for (const g of generic) if (list.length < 2 && g.options.length) list.push(g);
     if (!list.length) list.push({ ko: `${fromName}님에게 하고 싶은 말을 해 봐요.`, options: [{ en: 'Thank you for your letter.', ko: '편지 고마워요.' }] });
-    steps = list.slice(0, 5);
+    steps = list.slice(0, MAX_LINES - 1);   // 답장 문장은 질문까지 합쳐 다섯 개를 넘지 않게
     const tilesN = Math.ceil(steps.length / 2);
     steps.forEach((x, i) => {
       x.mode = i < tilesN ? 'tiles' : 'speak';
@@ -429,7 +430,11 @@ async function letterStep(S) {
     bindQuit();
     on('seeLetter', openLetter);
     on('hearAll', () => say(body(), S, 'hearAll'));
-    document.querySelectorAll('.sum-add').forEach((b) => b.addEventListener('click', () => { backTo = true; runStep(Number(b.dataset.i)); }));
+    document.querySelectorAll('.sum-add').forEach((b) => b.addEventListener('click', () => {
+      const count = parts.reduce((a, p0) => a + p0.items.length, 0);
+      if (count >= MAX_LINES) { $('msg').textContent = `편지는 ${MAX_LINES}문장까지예요. 더 넣으려면 하나를 지워 주세요.`; return; }
+      backTo = true; runStep(Number(b.dataset.i));
+    }));
     document.querySelectorAll('.sum-del').forEach((b) => b.addEventListener('click', () => { parts[Number(b.dataset.i)].items = []; summary(); }));
     document.querySelectorAll('.sum-edit').forEach((b) => b.addEventListener('click', () => {
       const i = Number(b.dataset.i);
@@ -669,7 +674,11 @@ function qaStep(S) {
       </div>
     </section>`);
     bindQuit();
-    const play = async () => { clearSpotlight(); if (await emma(full(q), S)) yourTurn(); };
+    // 클라우디아가 말하는 동안에는 말풍선만 밝게, 예시와 마이크는 흐리게
+    const play = async () => {
+      spotlight(document.querySelector('.qa .emma-row'), $('again'));
+      if (await emma(full(q), S)) yourTurn(); else if (!$('feedback')) clearSpotlight();
+    };
     on('again', play);
     // 클라우디아 말풍선을 누르면 흐린 화면이 풀려요
     on('bubble', () => { if (!$('feedback')) clearSpotlight(); });
