@@ -30,7 +30,7 @@ function clearProgress() {
 // 오늘 내용 불러오기 (없으면 AI가 만들기) ----------------------------------------------
 function validPack(c) {
   return c && Array.isArray(c.cards) && c.cards.length && Array.isArray(c.words) && c.words.length &&
-    Array.isArray(c.questions) && c.questions.length && c.talk && c.talk.opener_en;
+    Array.isArray(c.questions) && c.questions.length;
 }
 function tidy(c) {
   const str = (v) => (typeof v === 'string' ? v.trim() : '');
@@ -40,7 +40,7 @@ function tidy(c) {
     en: str(q.en), ko: str(q.ko),
     choices: (Array.isArray(q.choices) ? q.choices : []).slice(0, 3).map((x) => ({ en: str(x.en), ko: str(x.ko) })).filter((x) => x.en),
   })).filter((q) => q.en);
-  c.talk = {
+  if (c.talk) c.talk = {
     scene_ko: str(c.talk.scene_ko), opener_en: str(c.talk.opener_en), opener_ko: str(c.talk.opener_ko),
     suggestions: (Array.isArray(c.talk.suggestions) ? c.talk.suggestions : []).slice(0, 3).map((x) => ({ en: str(x && x.en), ko: str(x && x.ko) })).filter((x) => x.en),
   };
@@ -93,7 +93,7 @@ async function startDay({ day, review = false, startStep = null }) {
   clearTimeout(slow);
   const [letter, notes] = await Promise.all([letterP, notesP]);
 
-  const steps = [letter ? 'letter' : null, 'cards', 'words', 'qa', 'talk'].filter(Boolean);
+  const steps = [letter ? 'letter' : null, 'cards', 'words', 'qa'].filter(Boolean);
   const S = {
     day, review, pack, c: pack.content, letter, steps, i: 0, notes,
     level: pack.level, topic: pack.topic, rate: SPEECH_RATE[pack.level] || 0.85,
@@ -602,11 +602,20 @@ const CHEERS = [
   ['Great!', '좋아요!'], ['Good answer!', '좋은 대답이에요!'], ['Wonderful!', '훌륭해요!'], ['Thank you for telling me!', '말해 줘서 고마워요!'],
 ];
 
+const QA_TURNS = 6; // 묻고 답하기에서 주고받는 횟수 (3분 대화를 합친 길이)
 function qaStep(S) {
-  // 클라우디아가 대답에 되물으면 그 질문을 바로 다음 질문으로 끼워 넣어 대화를 이어가요 (질문마다 한 번만)
-  const qs = S.c.questions.slice();
-  let k = startAt(S, qs.length);
+  // 하나의 이어지는 대화예요: 대답하면 클라우디아가 반응하고 바로 이어서 물어요.
+  // qs[k] = { pre: 앞 대답에 대한 반응, q: 질문, ko, choices, used: 여기까지 쓴 준비된 질문 수 }
+  const pack = S.c.questions;
+  const total = QA_TURNS;
+  const fromPack = (i, pre = '', preKo = '') => ({ pre, preKo, q: pack[i].en, ko: pack[i].ko, choices: pack[i].choices, used: i + 1 });
+  let k = startAt(S, total);
+  const qs = [];
+  for (let i = 0; i <= k; i++) qs.push(fromPack(Math.min(i, pack.length - 1)));
+  const answers = [];
   const got = {}; // 문제마다 받은 점수 (다시 대답하면 바꿔 셉니다)
+  const full = (q) => (q.pre ? `${q.pre} ${q.q}` : q.q);
+  const fullKo = (q) => (q.preKo ? `${q.preKo} ${q.ko}` : q.ko);
 
   // 클라우디아가 말한 뒤: 마이크만 밝게
   function yourTurn() {
@@ -621,34 +630,32 @@ function qaStep(S) {
   }
 
   function ask() {
-    if (k >= qs.length) return nextStep(S);
     const q = qs[k];
+    if (k >= total || !q) return nextStep(S);
     mark(S, k);
     mount(`<section class="screen fit qa">
-      ${header(S, k / qs.length)}
+      ${header(S, k / total)}
       <div class="emma-row">
         ${avatar()}
         <div class="bubble" id="bubble">
-          <p class="en" lang="en">${esc(q.en)}</p>
-          <p class="ko">${esc(q.ko)}</p>
+          <p class="en" lang="en">${q.pre ? `<span class="pre">${esc(q.pre)}</span> ` : ''}${esc(q.q)}</p>
+          <p class="ko">${esc(fullKo(q))}</p>
         </div>
       </div>
       <button class="ghost again" id="again" type="button">${ICON.sound} 다시 듣기</button>
       <div id="area">
         <div class="sugg-list" id="qaChoices"></div>
-        <p class="hint say-tip" id="hint" aria-live="polite">클라우디아가 묻고 있어요…</p>
+        <p class="hint say-tip" id="hint" aria-live="polite">클라우디아가 ${q.pre ? '말하고' : '묻고'} 있어요…</p>
         ${canListen ? `<button class="mic" id="mic" type="button">${ICON.mic} 눌러서 대답하기</button>` : ''}
         ${canListen ? '' : `<form id="typed" class="typed"><input id="typedIn" type="text" autocomplete="off" placeholder="영어로 적어도 돼요" aria-label="영어로 적기"><button class="primary" type="submit">보내기</button></form>`}
       </div>
     </section>`);
     bindQuit();
-    const play = async () => { clearSpotlight(); if (await emma(q.en, S)) yourTurn(); };
+    const play = async () => { clearSpotlight(); if (await emma(full(q), S)) yourTurn(); };
     on('again', play);
     // 클라우디아 말풍선을 누르면 흐린 화면이 풀려요
     on('bubble', () => { if (!$('feedback')) clearSpotlight(); });
     setTimeout(() => { if ($('again')) play(); }, 350);
-    if (qs[k + 1]) prefetch(qs[k + 1].en);
-    else if (S.c.talk && S.c.talk.opener_en) prefetch(S.c.talk.opener_en);
     carousel($('qaChoices'), q.choices, {
       action: '이 대답 고르기',
       soft: true,
@@ -667,46 +674,69 @@ function qaStep(S) {
     });
   }
 
-  function addFollowUp(q, fu) {
-    if (q.follow) return;                                   // 이어지는 질문의 이어지는 질문은 만들지 않아요
-    const ok = fu && typeof fu.en === 'string' && fu.en.trim() && Array.isArray(fu.choices);
-    const has = qs[k + 1] && qs[k + 1].follow && qs[k + 1].parent === q;
-    if (!ok) { if (has) qs.splice(k + 1, 1); return; }    // 다시 대답해서 되묻지 않게 되면 빼요
-    const item = {
-      en: fu.en.trim(), ko: String(fu.ko || ''), follow: true, parent: q,
-      choices: fu.choices.filter((c) => c && c.en).slice(0, 3).map((c) => ({ en: String(c.en), ko: String(c.ko || '') })),
-    };
-    if (item.choices.length < 2) return;
-    if (has) qs[k + 1] = item; else qs.splice(k + 1, 0, item);
+  // 클라우디아의 반응 + 다음 질문을 한 덩어리로 만들어요
+  function nextItem(q, r) {
+    const str = (v) => (typeof v === 'string' ? v.trim() : '');
+    let pre = str(r && r.reply_en) || 'Thank you!';
+    let preKo = str(r && r.reply_ko) || (r && r.reply_en ? '' : '고마워요!');
+    const fu = r && r.follow_up;
+    const choices = fu && Array.isArray(fu.choices)
+      ? fu.choices.filter((c) => c && str(c.en)).slice(0, 3).map((c) => ({ en: str(c.en), ko: str(c.ko) })) : [];
+    if (fu && str(fu.en) && choices.length) {
+      const fq = str(fu.en);
+      if (pre.includes(fq)) { pre = pre.replace(fq, '').trim(); preKo = preKo.replace(str(fu.ko), '').trim(); }
+      return { pre, preKo, q: fq, ko: str(fu.ko), choices, used: q.used };
+    }
+    if (q.used >= pack.length) return null;                       // 이어 갈 질문이 없으면 여기서 마쳐요
+    // 반응에 질문이 섞여 있으면 빼고, 준비된 다음 질문으로 넘어가요
+    if (pre.includes('?')) { pre = pre.split(/(?<=[.!?])\s+/).filter((x) => !x.includes('?')).join(' ') || 'I see!'; preKo = ''; }
+    return fromPack(q.used, pre, preKo);
   }
 
   async function answered(q, text, how, ko = '') {
     clearSpotlight();
-    if (got[k] != null) { S.score.qa[0] -= got[k]; S.score.qa[1] -= 1; delete got[k]; }
+    const at = k;
+    const last = at === total - 1;
+    if (got[at] != null) { S.score.qa[0] -= got[at]; S.score.qa[1] -= 1; delete got[at]; }
     const before = S.score.qa[0];
+    answers[at] = text;
     $('area').innerHTML = `<div class="feedback"><p class="label">내가 한 말</p><p class="en" lang="en">${esc(text)}</p><p class="muted">클라우디아가 듣고 있어요…</p></div>`;
+    const req = {
+      question: q.q, answer: text, level: S.level, topic: S.topic, last, turn: at + 1, total,
+      history: qs.slice(0, at).map((x, i) => ({ q: x.q, a: answers[i] || '' })),
+      ideas: pack.slice(q.used, q.used + 3).map((x) => x.en),
+    };
     let r;
+    let nextP; // 다음에 클라우디아가 할 말 (반응 + 이어지는 질문)
     if (how === 'choice') {
-      const c = CHEERS[Math.floor(Math.random() * CHEERS.length)];
-      r = { reply_en: c[0], reply_ko: c[1], better_en: '', tip_ko: '', answer_ko: ko };
+      // 고른 대답은 바로 보여 주고, 이어지는 질문은 뒤에서 받아 와요
+      r = { better_en: '', tip_ko: '', answer_ko: ko };
       S.score.qa[0] += 1;
+      nextP = api.ai('check', { ...req, tapped: true }).catch(() => null);
     } else {
       try {
-        r = await api.ai('check', { question: q.en, answer: text, level: S.level, topic: S.topic });
+        r = await api.ai('check', req);
         api.addNotes(r.facts, S.topic).catch(() => {});
-        addFollowUp(q, r.follow_up);
-        save(S, { kind: 'qa', prompt_en: q.en, answer_en: text, better_en: r.better_en, answer_ko: r.answer_ko });
+        save(S, { kind: 'qa', prompt_en: q.q, answer_en: text, better_en: r.better_en, answer_ko: r.answer_ko });
         S.score.qa[0] += r.good ? 1 : 0.5;
       } catch (e) {
-        r = { reply_en: 'Thank you!', reply_ko: '고마워요!', better_en: '', tip_ko: '' };
+        r = { better_en: '', tip_ko: '' };
         S.score.qa[0] += 0.5;
-        save(S, { kind: 'qa', prompt_en: q.en, answer_en: text });
+        save(S, { kind: 'qa', prompt_en: q.q, answer_en: text });
       }
+      nextP = Promise.resolve(r);
     }
     S.score.qa[1] += 1;
-    got[k] = S.score.qa[0] - before;
-    if (!$('area')) return;
-    $('bubble').innerHTML = `<p class="en" lang="en">${esc(r.reply_en || 'Good!')}</p><p class="ko">${esc(r.reply_ko || '')}</p>`;
+    got[at] = S.score.qa[0] - before;
+    // 다음 말을 미리 만들어 두고 목소리도 준비해요
+    const cheer = CHEERS[Math.floor(Math.random() * CHEERS.length)];
+    const itemP = nextP.then((rr) => {
+      const src = rr && rr.reply_en ? rr : { ...(rr || {}), reply_en: how === 'choice' ? cheer[0] : '', reply_ko: how === 'choice' ? cheer[1] : '' };
+      if (last) return { bye: true, en: src.reply_en || 'It was so nice talking with you. See you tomorrow!', ko: src.reply_en ? (src.reply_ko || '') : '이야기해서 정말 좋았어요. 내일 또 만나요!' };
+      return nextItem(q, src);
+    });
+    itemP.then((it) => { if (it) prefetch(it.bye ? it.en : full(it)); });
+    if (!$('area') || k !== at) return;
     const showBetter = r.better_en && !sameSentence(r.better_en, text);
     $('area').innerHTML = `<div class="feedback" id="feedback">
         <p class="label">내가 한 말</p>
@@ -721,18 +751,47 @@ function qaStep(S) {
         ${r.tip_ko ? `<p class="tip">💡 ${esc(r.tip_ko)}</p>` : ''}
       </div>
       <div class="answer-nav" id="answerNav">
-        <button class="plain prev-btn" id="prevQ" type="button" ${k === 0 ? 'disabled' : ''}>이전</button>
+        <button class="plain prev-btn" id="prevQ" type="button" ${at === 0 ? 'disabled' : ''}>이전</button>
         <button class="plain retry-btn" id="retryQ" type="button">${ICON.mic} 다시 대답하기</button>
-        <button class="primary next-btn" id="nextQ" type="button">${qs[k + 1] && qs[k + 1].follow ? '이어서 대답하기' : '다음'}</button>
+        <button class="primary next-btn" id="nextQ" type="button">다음</button>
       </div>`;
     if ($('again')) $('again').hidden = true;
     on('hearBetter', () => emma(r.better_en, S));
-    on('nextQ', () => { k++; ask(); });
+    // 클라우디아의 대답은 '다음'을 눌렀을 때 이어지는 질문과 함께 들려요
+    on('nextQ', async () => {
+      $('nextQ').disabled = true;
+      $('nextQ').textContent = '잠시만요…';
+      const it = await itemP.catch(() => null);
+      if (k !== at || !$('nextQ')) return;
+      if (!it) return nextStep(S);
+      if (it.bye) return goodbye(it);
+      qs.length = at + 1;
+      qs.push(it);
+      k = at + 1;
+      ask();
+    });
     on('retryQ', () => ask());           // 같은 질문에 다시 대답
     on('prevQ', () => { if (k > 0) { k--; ask(); } });
     spotlight($('feedback'), $('answerNav'));
-    emma(r.reply_en, S);
     if (showBetter) prefetch(r.better_en);
+  }
+
+  // 마지막 대답 뒤: 클라우디아의 마무리 인사
+  function goodbye(it) {
+    clearSpotlight();
+    mount(`<section class="screen fit qa">
+      ${header(S, 1)}
+      <div class="emma-row">
+        ${avatar()}
+        <div class="bubble" id="bubble"><p class="en" lang="en">${esc(it.en)}</p><p class="ko">${esc(it.ko)}</p></div>
+      </div>
+      <button class="ghost again" id="again" type="button">${ICON.sound} 다시 듣기</button>
+      <button class="big primary" id="doneQa" type="button" style="margin-top:auto">마치기</button>
+    </section>`);
+    bindQuit();
+    on('again', () => emma(it.en, S));
+    on('doneQa', () => nextStep(S));
+    setTimeout(() => { if ($('doneQa')) emma(it.en, S); }, 350);
   }
 
   ask();
@@ -1048,8 +1107,7 @@ async function finishDay(S) {
   const ratio = ([a, b]) => (b ? a / b : null);
   const words = ratio(S.score.words);
   const qa = ratio(S.score.qa);
-  const talk = Math.min(1, S.score.talk / 6);
-  const parts = [words, qa, talk].filter((x) => x !== null);
+  const parts = [words, qa].filter((x) => x !== null);
   const total = Math.round((parts.reduce((x, y) => x + y, 0) / parts.length) * 100) / 100;
   const score = { words, qa, talk: S.score.talk, letter: S.score.letter, total };
   let levelMsg = '';
@@ -1084,8 +1142,7 @@ async function finishDay(S) {
       ${S.score.letter ? '<li>✉️ 답장 1통 보냄</li>' : ''}
       <li>📖 문장 ${S.c.cards.length}개</li>
       <li>🔤 낱말 ${S.c.words.length}개 · 문제 ${S.score.words[0]}/${S.score.words[1]} 맞힘</li>
-      <li>💬 질문 ${S.score.qa[1]}개에 대답</li>
-      <li>🗣️ 대화 ${S.score.talk}번 주고받음</li>
+      <li>💬 클라우디아와 ${S.score.qa[1]}번 묻고 답함</li>
     </ul>
     ${levelMsg ? `<p class="lead">${esc(levelMsg)}</p>` : ''}
     <button class="big primary" id="home" type="button">처음으로</button>

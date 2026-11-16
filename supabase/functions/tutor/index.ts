@@ -280,9 +280,7 @@ Return JSON with exactly this shape:
   "words": [ {"en": "...", "ko": "...", "say": "...", "emoji": "one emoji"} ], // 10 words for this topic; pick words he will need for the questions
   "questions": [                                                         // 5 questions Klaudia asks him, from easy to slightly deeper
     {"en": "...", "ko": "...", "choices": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]}
-  ],
-  "talk": {"scene_ko": "one Korean sentence describing the 3-minute chat scene", "opener_en": "Klaudia's first line", "opener_ko": "Korean meaning",
-           "suggestions": [ {"en": "...", "ko": "..."} ]}                // 3 different short answers he could say to opener_en, at his level
+  ]
 }
 Rules:
 - ${SAY_RULE}
@@ -295,26 +293,38 @@ Rules:
 // 묻고 답하기: 대답 확인
 async function checkAnswer(b: any, m?: Meter) {
   const level = levelOf(b.level);
-  const system = `You are Klaudia, a kind English teacher. ${LEARNER} Reply with JSON only.`;
-  const prompt = `Klaudia asked: "${clip(b.question, 300)}"
+  const last = !!b.last;
+  const history = (Array.isArray(b.history) ? b.history.slice(-6) : [])
+    .map((x: any) => `Klaudia: ${clip(x && x.q, 200)}\nLearner: ${clip(x && x.a, 200)}`).join("\n");
+  const ideas = (Array.isArray(b.ideas) ? b.ideas.slice(0, 3) : []).map((x: any) => `- ${clip(x, 200)}`).join("\n");
+  const system = `You are Klaudia, a kind English teacher having one continuous spoken conversation. ${LEARNER} Reply with JSON only.`;
+  const prompt = `${history ? `Conversation so far:\n${history}\n\n` : ""}Klaudia asked: "${clip(b.question, 300)}"
 The learner answered (from speech recognition or tapping, may have errors): "${clip(b.answer, 300)}"
+${b.tapped ? "He tapped a suggested answer, so it is already correct: good is true, better_en repeats his answer, tip_ko is empty." : ""}
 ${LEVELS[level]}
+${last
+    ? "This was the LAST exchange of today's session."
+    : `The conversation continues. Possible next subjects when it is time to move on:\n${ideas || "- (anything about today's topic)"}`}
 
 Return JSON:
 {
   "good": true or false,          // true if the meaning is understandable, even with small mistakes
-  "reply_en": "Klaudia's short warm reaction (max 12 words). It may end with ONE short, natural follow-up question about what he just said",
+  "reply_en": ${last
+    ? `"Klaudia's warm closing line: react to what he said, thank him for the talk and say goodbye (max 16 words). No question."`
+    : `"Klaudia's short warm reaction to what he said (max 10 words). Do NOT put a question here."`},
   "reply_ko": "Korean meaning of reply_en",
-  "follow_up": null or {"en": "the follow-up question exactly as asked in reply_en", "ko": "Korean meaning",
-                        "choices": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]},
-                        // only when reply_en asks a question; choices are 3 different short answers at his level
+  "follow_up": ${last ? "null" : `{"en": "Klaudia's next question (ONE short question at his level, max 12 words)", "ko": "Korean meaning",
+                "choices": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]}
+                // REQUIRED. It must flow naturally from what he just said, like a real conversation.
+                // If the last two questions were already about the same subject, move gently to one of the possible next subjects.
+                // Never repeat a question that was already asked. choices are 3 different short answers he could say, at his level.`},
   "better_en": "a natural, correct version of what he meant, at his level",
   "better_ko": "Korean meaning",
   "tip_ko": "one short Korean tip about grammar or a word, or empty string",
   "answer_ko": "what the learner meant, written in natural Korean in his own first-person voice (저는 ...)",
   "facts": ["short English facts about the learner's life learned from this answer, e.g. 'Has a son who lives in Busan'. Empty if none."]
 }`;
-  return await gemini(system, prompt, 0.4, 4096, m);
+  return await gemini(system, prompt, 0.5, 4096, m);
 }
 
 // 3분 대화: 한 턴
