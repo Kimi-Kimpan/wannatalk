@@ -780,14 +780,17 @@ Deno.serve(async (req) => {
 
   // 이 사용자의 배경은 서버가 직접 읽어 옵니다 (앱에서 보낸 값은 쓰지 않아요)
   delete b._bg;
+  let gone = false;
   if (b && ["pack", "check", "chat", "compose"].includes(b.action)) {   // 주제를 고르는 일에만 읽어 와요
     try {
       const db = createClient(url, key, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${token}` } } });
-      const { data } = await db.from("profiles").select("background_tags,background_note").eq("id", user.id).maybeSingle();
+      const { data } = await db.from("profiles").select("*").eq("id", user.id).maybeSingle();
+      if (data && data.deleted_at) gone = true;          // 관리자가 삭제한 계정
       if (data) b._bg = { tags: data.background_tags || [], note: data.background_note || "" };
     } catch { /* 배경 없이 진행 */ }
   }
 
+  if (gone) return json({ error: "unauthorized" }, 401);
   const meter: Meter = [];
   const handlers: Record<string, (b: any, m: Meter) => Promise<any>> = {
     pack: makePack, check: checkAnswer, chat: chatTurn, letter: readLetter, polish: polishReply,

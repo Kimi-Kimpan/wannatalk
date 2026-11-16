@@ -126,3 +126,10 @@ tbody tr:last-child td { border-bottom: 0; }
 .bg-idea:hover { opacity: 1; }
 .bg-box textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line, #d5dbe5); border-radius: 8px; font: inherit; background: transparent; color: inherit; resize: vertical; }
 .bg-box .row { display: flex; align-items: center; gap: 12px; }
+/* 계정 삭제·복원 */
+.btn.danger { border-color: #c0392b; color: #c0392b; background: transparent; }
+.btn.danger:hover { background: #c0392b; color: #fff; }
+.del-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 10px 0; padding: 12px 14px; border: 1px solid #c0392b; border-radius: 10px; }
+.del-confirm[hidden] { display: none; }
+.removed-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.removed-row:last-child { border-bottom: 0; }

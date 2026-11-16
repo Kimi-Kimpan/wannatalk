@@ -262,6 +262,14 @@ export async function boot() {
       p = await api.getProfile(state.user.id);
     }
     if (!p) throw new Error('no profile');
+    if (p.deleted_at) {
+      // 관리자가 삭제한 계정: 들어올 수 없어요
+      await api.signOut().catch(() => {});
+      state.user = null; state.profile = null;
+      mount(`<section class="screen center"><h1>이 계정은 사용할 수 없어요</h1><p class="lead">관리자에게 문의해 주세요.</p><button class="big plain" id="toLogin" type="button">처음으로</button></section>`);
+      on('toLogin', () => go('login'));
+      return;
+    }
     state.profile = p;
     api.touchSeen(state.user.id).catch(() => {});
     if (api.freshLogin && api.inIOSBrowser() && !state.handoffShown) { state.handoffShown = true; return handoff(); }

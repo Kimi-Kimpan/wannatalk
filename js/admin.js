@@ -145,11 +145,18 @@ async function afterLogin() {
   await loadUsers();
 }
 
+let removed = []; // 삭제해서 보관 중인 계정
+const KEEP_DAYS = 30;
 async function loadUsers() {
   root.innerHTML = '<p class="muted">사용자 불러오는 중…</p>';
+  await sb.rpc('admin_purge_deleted').then(() => {}, () => {});   // 30일 지난 보관 계정 정리
   const { data, error } = await sb.rpc('admin_users');
   if (error) { root.innerHTML = `<p>불러오지 못했어요: ${esc(error.message)}</p>`; return; }
-  users = data || [];
+  const del = await sb.rpc('admin_deleted').then((r) => r.data || [], () => []);
+  const delAt = Object.fromEntries(del.map((d) => [d.id, d.deleted_at]));
+  removed = (data || []).filter((u) => delAt[u.id]).map((u) => ({ ...u, deleted_at: delAt[u.id] }));
+  users = (data || []).filter((u) => !delAt[u.id]);
+  if (selected && !users.some((u) => u.id === selected)) selected = null;
   render();
   loadSignup();
   loadUsage();
@@ -254,9 +261,36 @@ function render() {
       </div>
     </section>
 
+    ${removed.length ? `<section class="panel">
+      <div class="panel-head"><h2>삭제된 계정</h2><span class="muted">${KEEP_DAYS}일 동안 보관한 뒤 완전히 지워져요. 그 전에는 복원할 수 있어요.</span></div>
+      <div class="list">${removed.map((u) => {
+        const left = Math.max(0, Math.ceil(KEEP_DAYS - daysSince(u.deleted_at)));
+        return `<div class="removed-row" data-id="${esc(u.id)}">
+          <div class="who"><b>${esc(u.name || '(이름 없음)')}</b> <small>${esc(u.email)}</small><br><span class="muted">${fmtDate(u.deleted_at)} 삭제 · ${left}일 뒤 완전히 삭제</span></div>
+          <div class="row"><button class="btn primary act-restore" type="button">복원</button><button class="btn danger act-purge" type="button">지금 완전히 삭제</button></div>
+        </div>`; }).join('')}</div>
+      <p class="muted" id="removedMsg" role="status"></p>
+    </section>` : ''}
+
     <section id="detail"></section>`;
 
   $('refresh').addEventListener('click', loadUsers);
+  root.querySelectorAll('.removed-row').forEach((r) => {
+    const id = r.dataset.id;
+    r.querySelector('.act-restore').addEventListener('click', async () => {
+      const { error } = await sb.rpc('admin_restore_user', { uid: id });
+      if (error) { $('removedMsg').textContent = '복원하지 못했어요. 다시 눌러 주세요.'; return; }
+      loadUsers();
+    });
+    const purge = r.querySelector('.act-purge');
+    purge.addEventListener('click', async () => {
+      if (!purge.dataset.sure) { purge.dataset.sure = '1'; purge.textContent = '되돌릴 수 없어요 · 한 번 더 누르면 삭제'; return; }
+      purge.disabled = true;
+      const { error } = await sb.rpc('admin_purge_user', { uid: id });
+      if (error) { purge.disabled = false; $('removedMsg').textContent = '삭제하지 못했어요. 다시 눌러 주세요.'; return; }
+      loadUsers();
+    });
+  });
   if ($('toApp')) $('toApp').addEventListener('click', handoffView);
   $('out').addEventListener('click', async () => { await sb.auth.signOut({ scope: 'local' }); loginView(); });
   root.querySelectorAll('tbody tr[data-id]').forEach((tr) => tr.addEventListener('click', () => openUser(tr.dataset.id)));
@@ -307,7 +341,13 @@ async function openUser(id) {
       <div class="row">
         <button class="btn" id="copyMemoir" type="button">자서전 자료 복사</button>
         <button class="btn primary" id="dlMemoir" type="button">자서전 자료 내려받기 (.md)</button>
+        <button class="btn danger" id="delUser" type="button">계정 삭제</button>
       </div>
+    </div>
+    <div class="del-confirm" id="delConfirm" hidden>
+      <span><b>${esc(u.name || u.email)}</b> 계정을 삭제할까요? 바로 들어올 수 없게 되고, 자료는 ${KEEP_DAYS}일 동안 보관돼서 그 안에는 복원할 수 있어요.</span>
+      <span class="row"><button class="btn danger" id="delYes" type="button">삭제</button><button class="btn" id="delNo" type="button">취소</button></span>
+      <span class="muted" id="delMsg" role="alert"></span>
     </div>
     <div class="detail">
       <div class="facts">
@@ -330,6 +370,20 @@ async function openUser(id) {
   </section>`;
 
   backgroundBox(id);
+  $('delUser').addEventListener('click', () => { $('delConfirm').hidden = false; });
+  $('delNo').addEventListener('click', () => { $('delConfirm').hidden = true; });
+  $('delYes').addEventListener('click', async () => {
+    $('delYes').disabled = true;
+    const { error } = await sb.rpc('admin_delete_user', { uid: id });
+    if (error) {
+      $('delYes').disabled = false;
+      $('delMsg').textContent = /self/.test(error.message) ? '지금 로그인한 내 계정은 삭제할 수 없어요.'
+        : /cannot_delete_admin/.test(error.message) ? '관리자 계정은 삭제할 수 없어요.' : '삭제하지 못했어요. 다시 눌러 주세요.';
+      return;
+    }
+    selected = null;
+    loadUsers();
+  });
 
   const bodies = {
     memoir: () => memoirHtml(E),
