@@ -374,12 +374,12 @@ async function backgroundBox(id) {
   if (error) { box.innerHTML = '<h3>배경</h3><p class="empty">아직 쓸 수 없어요. (데이터베이스 준비가 필요해요)</p>'; return; }
   let tags = (data && data.background_tags) || [];
   const note = (data && data.background_note) || '';
-  box.innerHTML = `<h3>배경 <span class="muted">· 클라우디아가 이 사용자에게 맞는 대화 주제를 고를 때 참고해요</span></h3>
+  box.innerHTML = `<h3>배경 <span class="muted">· 클라우디아가 이 사용자에게 맞는 대화 주제를 고를 때 참고해요 (태그 최대 10개)</span></h3>
     <div class="bg-tags" id="bgTags"></div>
     <form class="bg-add" id="bgAdd"><input id="bgIn" type="text" maxlength="40" placeholder="태그 적기 (예: 병원 근무, 손주 2명)" aria-label="새 태그"><button class="btn" type="submit">추가</button></form>
     <div class="bg-ideas" id="bgIdeas"></div>
     <label class="label" for="bgNote">메모 (자유롭게, 한국어나 영어)</label>
-    <textarea id="bgNote" rows="3" maxlength="600" placeholder="예: 딸이 캐나다에 살아서 손주와 영어로 이야기하고 싶어 해요.">${esc(note)}</textarea>
+    <textarea id="bgNote" rows="3" maxlength="300" placeholder="예: 딸이 캐나다에 살아서 손주와 영어로 이야기하고 싶어 해요.">${esc(note)}</textarea>
     <div class="row"><button class="btn primary" id="bgSave" type="button">배경 저장</button><span class="muted" id="bgMsg" role="status"></span></div>`;
   const draw = () => {
     $('bgTags').innerHTML = tags.length
@@ -392,7 +392,7 @@ async function backgroundBox(id) {
   const dirty = () => { $('bgMsg').textContent = '저장하지 않은 변경이 있어요'; };
   const add = (t) => {
     t = String(t || '').trim().slice(0, 40);
-    if (!t || tags.includes(t) || tags.length >= 20) return;
+    if (!t || tags.includes(t) || tags.length >= 10) return;
     tags = tags.concat(t); draw(); dirty();
   };
   draw();

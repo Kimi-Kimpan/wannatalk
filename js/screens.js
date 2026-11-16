@@ -288,8 +288,7 @@ register('setup', () => {
       <p class="msg" id="msg" role="alert"></p>
     </div>
     <div class="stack">
-      <button class="big primary" id="learner" type="button">영어를 배우러 왔어요</button>
-      <button class="big plain" id="friend" type="button" lang="en">I'm here to write to a learner</button>
+      <button class="big primary" id="learner" type="button">시작하기</button>
     </div>
   </section>`);
   async function choose(role) {
@@ -305,7 +304,6 @@ register('setup', () => {
     }
   }
   on('learner', () => choose('learner'));
-  on('friend', () => choose('friend'));
 });
 
 // 홈: 오늘의 대시보드 -------------------------------------------------------------------
@@ -549,6 +547,21 @@ register('settings', async () => {
     </form>
     </div>
 
+    <div class="panel fold">
+      <button class="past-toggle fold-toggle" type="button" aria-expanded="false" data-fold="tagBody">
+        <span>나에 대한 태그 <small class="muted" id="tagCount"></small></span><span class="arrow" aria-hidden="true">▾</span></button>
+      <div class="fold-body" hidden data-body="tagBody">
+        <p class="muted">클라우디아가 나에게 맞는 이야기를 고를 때 참고해요. 최대 10개까지 붙일 수 있어요.</p>
+        <div class="my-tags" id="myTags"></div>
+        <form class="tag-add" id="tagAdd" novalidate>
+          <input id="tagIn" type="text" maxlength="40" autocomplete="off" placeholder="예: 손주 2명, 낚시 좋아함" aria-label="새 태그">
+          <button class="plain mid" type="submit">추가</button>
+        </form>
+        <p class="msg" id="tagMsg" role="status"></p>
+        <button class="big primary" id="tagSave" type="button">태그 저장</button>
+      </div>
+    </div>
+
     <div class="panel">
       <h2>공부 단계</h2>
       <p>지금 <b>${p.level}단계</b> · ${esc(LEVEL_NAMES[p.level])}</p>
@@ -594,6 +607,35 @@ register('settings', async () => {
     if (!body.hidden) t.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }));
   on('openMail', () => go('message', { from: 'settings' }));
+  // 나에 대한 태그: 눌러서 지우고, 적어서 추가하고, 저장
+  let myTags = (p.background_tags || []).slice(0, 10);
+  function drawTags() {
+    $('tagCount').textContent = `· ${myTags.length}/10`;
+    $('myTags').innerHTML = myTags.length
+      ? myTags.map((t, i) => `<span class="my-tag">${esc(t)}<button type="button" data-i="${i}" aria-label="${esc(t)} 지우기">×</button></span>`).join('')
+      : '<span class="muted">아직 태그가 없어요.</span>';
+    $('myTags').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+      myTags.splice(Number(b.dataset.i), 1); drawTags(); $('tagMsg').textContent = '저장을 눌러야 적용돼요.';
+    }));
+  }
+  drawTags();
+  $('tagAdd').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const t = $('tagIn').value.trim().slice(0, 40);
+    if (!t) return;
+    if (myTags.length >= 10) { $('tagMsg').textContent = '태그는 10개까지예요. 하나를 지우고 추가해 주세요.'; return; }
+    if (!myTags.includes(t)) myTags.push(t);
+    $('tagIn').value = ''; drawTags(); $('tagMsg').textContent = '저장을 눌러야 적용돼요.';
+  });
+  on('tagSave', async () => {
+    $('tagSave').disabled = true;
+    try {
+      await api.setMyBackground(myTags);
+      state.profile = await api.getProfile(state.user.id);
+      $('tagMsg').textContent = '저장했어요. 다음 공부부터 적용돼요.';
+    } catch (err) { $('tagMsg').textContent = '저장하지 못했어요. 다시 눌러 주세요.'; }
+    if ($('tagSave')) $('tagSave').disabled = false;
+  });
   // 이름: 연필을 누르면 고칠 수 있고, 체크를 누르면 저장돼요
   let editing = false;
   async function nameToggle() {

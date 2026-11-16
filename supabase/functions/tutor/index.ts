@@ -41,13 +41,13 @@ const LEARNER_BASE =
   "(The instructions below say 'he/him' for the learner; follow the background for who the person really is.)";
 function learnerOf(b: any): string {
   const bg = b && b._bg;
-  const tags = bg && Array.isArray(bg.tags) ? bg.tags.map((t: any) => clip(t, 40)).filter(Boolean).slice(0, 20) : [];
-  const note = bg ? clip(bg.note, 600) : "";
+  if (!bg) return LEARNER_BASE;                       // 배경이 필요 없는 일(편지 읽기 등)에는 붙이지 않아요
+  const tags = Array.isArray(bg.tags) ? bg.tags.map((t: any) => clip(t, 40)).filter(Boolean).slice(0, 10) : [];
+  const note = clip(bg.note, 300);
   if (!tags.length && !note) {
-    return `${LEARNER_BASE} Nothing is known yet about this learner's job, age or family: do NOT assume any (no airport, no particular relatives or countries). Ask general, everyday questions and learn about the person from the answers.`;
+    return `${LEARNER_BASE} Nothing is known about this learner's job, age or family: assume nothing, ask general everyday questions.`;
   }
-  return `${LEARNER_BASE} Background of THIS learner (set by the family; choose subjects, examples and questions that fit it): ` +
-    `${tags.length ? `tags: ${tags.join("; ")}. ` : ""}${note ? `note: ${note}` : ""}`;
+  return `${LEARNER_BASE} This learner's background (fit subjects and examples to it): ${tags.join("; ")}${tags.length && note ? ". " : ""}${note}`;
 }
 function topicText(b: any, topic: string): string {
   const bg = b && b._bg;
@@ -780,7 +780,7 @@ Deno.serve(async (req) => {
 
   // 이 사용자의 배경은 서버가 직접 읽어 옵니다 (앱에서 보낸 값은 쓰지 않아요)
   delete b._bg;
-  if (b && !["tts", "stt", "ping"].includes(b.action)) {
+  if (b && ["pack", "check", "chat", "compose"].includes(b.action)) {   // 주제를 고르는 일에만 읽어 와요
     try {
       const db = createClient(url, key, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${token}` } } });
       const { data } = await db.from("profiles").select("background_tags,background_note").eq("id", user.id).maybeSingle();

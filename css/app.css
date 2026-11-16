@@ -858,3 +858,10 @@ body.sheet-open { overflow: hidden; }
 .about .bottom { margin-top: auto; }
 .about.tight .about-opt { min-height: 52px; }
 .about.tighter .about-opt { min-height: 46px; font-size: 18px; }
+/* 설정: 나에 대한 태그 */
+.my-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.my-tag { display: inline-flex; align-items: center; gap: 2px; padding: 4px 4px 4px 14px; border-radius: 999px; background: color-mix(in srgb, var(--primary) 22%, var(--card)); font-size: 19px; font-weight: 700; }
+.my-tag button { width: 40px; height: 40px; border: 0; border-radius: 50%; background: transparent; color: inherit; font-size: 24px; line-height: 1; }
+.tag-add { display: flex; gap: 8px; align-items: stretch; }
+.tag-add input { flex: 1; min-width: 0; }
+.tag-add button { flex: 0 0 auto; min-height: 56px; padding: 0 16px; }
