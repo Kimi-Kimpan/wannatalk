@@ -627,7 +627,7 @@ function qaStep(S) {
     if (!$('area') || $('feedback')) return;
     if (canListen) {
       $('hint').innerHTML = qs[k] && qs[k].ask ? '<b>이번엔 물어볼 차례예요.</b><br>마이크를 누르거나 예시 질문을 골라 주세요.' : '이제 말씀하실 차례예요.<br>마이크를 누르거나 예시를 골라 주세요.';
-      spotlight($('mic'), $('hint'), $('again'), $('qaChoices'));
+      spotlight($('mic'), $('hint'), $('again'), $('qaChoices'), $('pickTip'));
     } else {
       $('hint').textContent = '아래에서 대답을 고르거나 영어로 적어 주세요.';
       spotlight($('area'), $('again'));
@@ -649,6 +649,7 @@ function qaStep(S) {
       </div>
       <button class="ghost again" id="again" type="button">${ICON.sound} 다시 듣기</button>
       <div id="area">
+        <p class="pick-tip" id="pickTip">${canListen ? (q.ask ? '아래 예시를 고르거나, 직접 물어보세요' : '아래 예시를 고르거나, 직접 말해주세요') : '아래 예시를 골라 주세요'}</p>
         <div class="sugg-list" id="qaChoices"></div>
         <p class="hint say-tip" id="hint" aria-live="polite">클라우디아가 ${q.pre || q.ask ? '말하고' : '묻고'} 있어요…</p>
         ${canListen ? `<button class="mic" id="mic" type="button">${ICON.mic} ${q.ask ? '눌러서 물어보기' : '눌러서 대답하기'}</button>` : ''}

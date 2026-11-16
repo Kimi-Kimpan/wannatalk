@@ -865,3 +865,11 @@ body.sheet-open { overflow: hidden; }
 .tag-add { display: flex; gap: 8px; align-items: stretch; }
 .tag-add input { flex: 1; min-width: 0; }
 .tag-add button { flex: 0 0 auto; min-height: 56px; padding: 0 16px; }
+/* 예시 카드 위의 작은 안내 */
+.pick-tip { margin: 0 0 4px; font-size: 15px; color: var(--ink-soft); text-align: center; flex-shrink: 0; }
+.tighter .pick-tip { font-size: 14px; margin-bottom: 2px; }
+/* 녹음 중 빨간 버튼의 번짐이 위 예시 카드를 덮지 않게 */
+.screen.fit.qa .mic.recording, .screen.fit.talk2 .mic.recording { box-shadow: 0 0 0 calc(3px + var(--lvl, 0) * 8px) rgba(179,38,30,.25); }
+.screen.fit.qa #area > .mic { margin-top: 8px; }
+.screen.fit.qa #area > .say-tip + .mic { margin-top: 0; }
+.screen.fit.tighter.qa #area > .mic { margin-top: 12px; }
