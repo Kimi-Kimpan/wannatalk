@@ -166,6 +166,11 @@ export async function getProfile(uid) {
   if (error) throw error;
   return data;
 }
+// 처음 시작할 때 본인이 고른 배경 태그 (비어 있을 때만 저장돼요)
+export async function setMyBackground(tags) {
+  const { error } = await sb.rpc('set_my_background', { tags });
+  if (error) throw error;
+}
 export async function updateProfile(uid, fields) {
   const { data, error } = await sb.from('profiles').update(fields).eq('id', uid).select('*').single();
   if (error) throw error;

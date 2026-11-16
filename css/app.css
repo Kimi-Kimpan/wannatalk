@@ -848,3 +848,13 @@ body.sheet-open { overflow: hidden; }
 .name-row input { flex: 1; min-width: 0; }
 .icon-btn { flex: 0 0 52px; width: 52px; min-height: 52px; padding: 0; display: grid; place-items: center; border-radius: 14px; }
 .icon-btn.on { background: var(--primary); color: var(--primary-ink, #fff); }
+/* 처음 시작 질문 */
+.about h1 { margin: 6px 0 2px; }
+.about-opts { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.about-opts.grid { display: grid; grid-template-columns: 1fr 1fr; }
+.about-opt { min-height: 60px; }
+.about-opts.grid .about-opt { min-height: 54px; font-size: 19px; padding: 4px 6px; }
+.about-opt.on { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+.about .bottom { margin-top: auto; }
+.about.tight .about-opt { min-height: 52px; }
+.about.tighter .about-opt { min-height: 46px; font-size: 18px; }

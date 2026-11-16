@@ -267,7 +267,9 @@ export async function boot() {
     if (api.freshLogin && api.inIOSBrowser() && !state.handoffShown) { state.handoffShown = true; return handoff(); }
     if (!p.name || !p.role) return go('setup');
     if (p.role === 'friend') return go('friend');
-    if (!p.placement) return go('placement');
+    // 처음 온 학습자에게는 몇 가지를 먼저 여쭤봐요 (배경이 비어 있을 때 한 번만)
+    const noBg = !(p.background_tags && p.background_tags.length) && !p.background_note;
+    if (!p.placement) return go(noBg && !state.aboutDone ? 'about' : 'placement');
     return go('home');
   } catch (e) {
     errorScreen('연결이 잘 안 돼요. 인터넷을 확인하고 다시 눌러 주세요.', boot, boot);

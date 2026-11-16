@@ -3,6 +3,7 @@ import { state, go, mount, register } from './ui.js';
 import { configured, sb } from './api.js';
 import { boot } from './screens.js';
 import './placement.js';
+import './about.js';
 import './learn.js';
 import './friend.js';
 import './message.js';
