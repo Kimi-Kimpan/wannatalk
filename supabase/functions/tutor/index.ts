@@ -298,7 +298,7 @@ ${notesText(b.notes)}
 Return JSON with exactly this shape:
 {
   "title_ko": "short Korean title for today's lesson (max 14 characters)",
-  "cards": [ {"en": "...", "ko": "...", "say": "..."} ],            // 6 useful sentences HE can say about this topic, first person, matching the level
+  "cards": [ {"en": "...", "ko": "...", "say": "..."} ],            // 6 useful sentences HE can say about this topic, matching the level: 4 or 5 first-person statements, then 1 or 2 QUESTIONS he can ask another person about this topic
   "words": [ {"en": "...", "ko": "...", "say": "...", "emoji": "one emoji"} ], // 10 words for this topic; pick words he will need for the questions
   "questions": [                                                         // 5 questions Klaudia asks him, from easy to slightly deeper
     {"en": "...", "ko": "...", "choices": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]}
@@ -313,38 +313,72 @@ Rules:
 }
 
 // 묻고 답하기: 대답 확인
+// 클라우디아 자신의 이야기 (사용자가 물어볼 때 늘 같은 사람으로 대답하도록)
+const KLAUDIA_LIFE =
+  "Klaudia's own life (keep it consistent): she lives in a small flat in Vancouver, Canada, with a cat named Mochi; she teaches English online; " +
+  "she likes hiking, baking bread and jazz; she has a younger brother; she drinks tea every morning.";
+
 async function checkAnswer(b: any, m?: Meter) {
   const level = levelOf(b.level);
   const last = !!b.last;
+  const asking = b.mode === "ask";       // 이번에는 학습자가 클라우디아에게 질문했어요
+  const nextAsk = !!b.next_ask && !last;  // 다음은 학습자가 질문할 차례
   const history = (Array.isArray(b.history) ? b.history.slice(-6) : [])
     .map((x: any) => `Klaudia: ${clip(x && x.q, 200)}\nLearner: ${clip(x && x.a, 200)}`).join("\n");
   const ideas = (Array.isArray(b.ideas) ? b.ideas.slice(0, 3) : []).map((x: any) => `- ${clip(x, 200)}`).join("\n");
+  const letters = (Array.isArray(b.letters) ? b.letters.slice(0, 3) : [])
+    .map((x: any) => `- From ${clip(x && x.from, 40) || "family"}: "${clip(x && x.body, 300)}"`).join("\n");
+  const useLetters = (asking || nextAsk) && letters
+    ? `\nMessages he recently received from family or friends (use these FIRST as material; only make things up when nothing here fits):\n${letters}\n` : "";
   const system = `You are Klaudia, a kind English teacher having one continuous spoken conversation. ${learnerOf(b)} Reply with JSON only.`;
-  const prompt = `${history ? `Conversation so far:\n${history}\n\n` : ""}Klaudia asked: "${clip(b.question, 300)}"
-The learner answered (from speech recognition or tapping, may have errors): "${clip(b.answer, 300)}"
-${b.tapped ? "He tapped a suggested answer, so it is already correct: good is true, better_en repeats his answer, tip_ko is empty." : ""}
-${LEVELS[level]}
-${last
-    ? "This was the LAST exchange of today's session."
-    : `The conversation continues. Possible next subjects when it is time to move on:\n${ideas || "- (anything about today's topic)"}`}
 
+  const situation = asking
+    ? `Klaudia invited him to ask a question: "${clip(b.question, 300)}"
+The learner asked (from speech recognition or tapping, may have errors): "${clip(b.answer, 300)}"
+Judge it as a QUESTION: is it understandable and correctly formed (word order, do/does/did, question word)?`
+    : `Klaudia asked: "${clip(b.question, 300)}"
+The learner answered (from speech recognition or tapping, may have errors): "${clip(b.answer, 300)}"`;
+
+  const replySpec = asking
+    ? `"Klaudia's ANSWER to his question, one or two short sentences at his level${last ? ", then a warm goodbye. No question." : ". Do NOT put a question here."}"
+                 // If the question is about something in the messages above, answer with what the message says and name the sender (e.g. 'Clara said it snowed a lot there!').
+                 // If the message does not say, tell him it is a good question to ask that person in his reply. Otherwise answer from Klaudia's own life: ${KLAUDIA_LIFE}`
+    : last
+    ? `"Klaudia's warm closing line: react to what he said, thank him for the talk and say goodbye (max 16 words). No question."`
+    : `"Klaudia's short warm reaction to what he said (max 10 words). Do NOT put a question here."`;
+
+  const nextSpec = last ? `"follow_up": null,`
+    : nextAsk
+    ? `"ask_task": {"en": "Klaudia's invitation for HIM to ask a question now: one short line that says what to ask about (e.g. 'Now it is your turn! Ask me about my weekend.')",
+               "ko": "the same in Korean, clearly telling him what to ask (e.g. '이번에는 직접 물어보세요. 클라우디아의 주말이 어땠는지 물어보세요.')",
+               "choices": [ {"en": "...?", "ko": "..."}, {"en": "...?", "ko": "..."}, {"en": "...?", "ko": "..."} ]},
+               // REQUIRED. choices are 3 different correct QUESTIONS he could ask, short and at his level.
+               // If the messages above mention something worth asking about (weather, health, plans, family), make the task about that, naming the sender
+               // (e.g. 'Clara said it snowed. Ask how cold it is there.'). Otherwise ask about Klaudia's life in a way that fits today's conversation.`
+    : `"follow_up": {"en": "Klaudia's next question (ONE short question at his level, max 12 words)", "ko": "Korean meaning",
+                "choices": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]},
+                // REQUIRED. It must flow naturally from what was just said, like a real conversation.
+                // If the last two questions were already about the same subject, move gently to one of the possible next subjects.
+                // Never repeat a question that was already asked. choices are 3 different short answers he could say, at his level.`;
+
+  const prompt = `${history ? `Conversation so far:\n${history}\n\n` : ""}${situation}
+${b.tapped ? "He tapped a suggested line, so it is already correct: good is true, better_en repeats it, tip_ko is empty." : ""}
+${LEVELS[level]}
+${last ? "This was the LAST exchange of today's session."
+    : `The conversation continues. Possible next subjects when it is time to move on:\n${ideas || "- (anything about today's topic)"}`}
+${useLetters}
 Return JSON:
 {
   "good": true or false,          // true if the meaning is understandable, even with small mistakes
-  "reply_en": ${last
-    ? `"Klaudia's warm closing line: react to what he said, thank him for the talk and say goodbye (max 16 words). No question."`
-    : `"Klaudia's short warm reaction to what he said (max 10 words). Do NOT put a question here."`},
+  "reply_en": ${replySpec},
   "reply_ko": "Korean meaning of reply_en",
-  "follow_up": ${last ? "null" : `{"en": "Klaudia's next question (ONE short question at his level, max 12 words)", "ko": "Korean meaning",
-                "choices": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]}
-                // REQUIRED. It must flow naturally from what he just said, like a real conversation.
-                // If the last two questions were already about the same subject, move gently to one of the possible next subjects.
-                // Never repeat a question that was already asked. choices are 3 different short answers he could say, at his level.`},
+  ${nextSpec}
   "better_en": "a natural, correct version of what he meant, at his level",
   "better_ko": "Korean meaning",
-  "tip_ko": "one short Korean tip about grammar or a word, or empty string",
-  "answer_ko": "what the learner meant, written in natural Korean in his own first-person voice (저는 ...)",
-  "facts": ["short English facts about the learner's life learned from this answer, e.g. 'Has a son who lives in Busan'. Empty if none."]
+  "tip_ko": "one short Korean tip about grammar or a word${asking ? " (for questions: word order or do/does/did)" : ""}, or empty string",
+  "answer_ko": "what the learner meant, written in natural Korean in his own first-person voice",
+  "facts": ${asking ? "[]" : `["short English facts about the learner's life learned from this answer, e.g. 'Has a son who lives in Busan'. Empty if none."]`},
+  "can_ask": true
 }`;
   return await gemini(system, prompt, 0.5, 4096, m);
 }

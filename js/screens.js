@@ -344,7 +344,7 @@ register('home', async () => {
   const doneSteps = new Set(resume && Array.isArray(resume.done) ? resume.done : []);
   const resuming = !!resume && (doneSteps.size > 0 || resume.sub > 0);
 
-  const STEPS = [['letter', '편지 읽고 답장하기'], ['cards', '문장 카드'], ['words', '낱말 10개'], ['qa', '묻고 답하기']];
+  const STEPS = [['cards', '문장 카드'], ['words', '낱말 10개'], ['qa', '묻고 답하기'], ['letter', '편지 읽고 답장하기']];
   const nowStep = resume ? resume.step : null;
   const checklist = STEPS.map(([id, label]) => {
     const done = doneToday || doneSteps.has(id);

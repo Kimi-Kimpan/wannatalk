@@ -93,7 +93,7 @@ async function startDay({ day, review = false, startStep = null }) {
   clearTimeout(slow);
   const [letter, notes] = await Promise.all([letterP, notesP]);
 
-  const steps = [letter ? 'letter' : null, 'cards', 'words', 'qa'].filter(Boolean);
+  const steps = ['cards', 'words', 'qa', letter ? 'letter' : null].filter(Boolean);   // 편지 답장은 연습을 다 한 뒤 맨 마지막에
   const S = {
     day, review, pack, c: pack.content, letter, steps, i: 0, notes,
     level: pack.level, topic: pack.topic, rate: SPEECH_RATE[pack.level] || 0.85,
@@ -445,7 +445,7 @@ async function letterStep(S) {
           <div class="big-emoji" aria-hidden="true">✉️</div>
           <h1>답장을 보냈어요!</h1>
           <p class="lead">${esc(fromName)}님이 기뻐할 거예요.</p>
-          <button class="big primary" id="go" type="button">오늘 공부 계속하기</button>
+          <button class="big primary" id="go" type="button">오늘 공부 마치기</button>
         </section>`);
         on('go', () => nextStep(S));
       } catch (e) {
@@ -615,13 +615,22 @@ function qaStep(S) {
   const answers = [];
   const got = {}; // 문제마다 받은 점수 (다시 대답하면 바꿔 셉니다)
   const full = (q) => (q.pre ? `${q.pre} ${q.q}` : q.q);
+  // 뒤쪽에는 사용자가 클라우디아에게 물어보는 차례가 있어요 (1·2단계는 한 번, 3단계부터 두 번)
+  const askAt = new Set(S.level >= 3 ? [2, 4] : [3]);
+  let canAsk = true;   // 서버가 질문 차례를 지원하지 않으면 예전처럼 대답만 해요
+  // 받은 편지 내용을 질문 연습의 소재로 먼저 써요
+  let inbox = [];
+  Promise.all([api.myLetters(state.user.id, 30), api.myContacts()]).then(([ls, cs]) => {
+    const names = Object.fromEntries(cs.map((c) => [c.id, c.name]));
+    inbox = ls.filter((l) => l.from_id !== state.user.id).slice(0, 3).map((l) => ({ from: names[l.from_id] || '', body: String(l.body || '').slice(0, 300) }));
+  }).catch(() => {});
   const fullKo = (q) => (q.preKo ? `${q.preKo} ${q.ko}` : q.ko);
 
   // 클라우디아가 말한 뒤: 마이크만 밝게
   function yourTurn() {
     if (!$('area') || $('feedback')) return;
     if (canListen) {
-      $('hint').innerHTML = '이제 말씀하실 차례예요.<br>마이크를 누르거나 예시를 골라 주세요.';
+      $('hint').innerHTML = qs[k] && qs[k].ask ? '<b>이번엔 물어볼 차례예요.</b><br>마이크를 누르거나 예시 질문을 골라 주세요.' : '이제 말씀하실 차례예요.<br>마이크를 누르거나 예시를 골라 주세요.';
       spotlight($('mic'), $('hint'), $('again'), $('qaChoices'));
     } else {
       $('hint').textContent = '아래에서 대답을 고르거나 영어로 적어 주세요.';
@@ -645,8 +654,8 @@ function qaStep(S) {
       <button class="ghost again" id="again" type="button">${ICON.sound} 다시 듣기</button>
       <div id="area">
         <div class="sugg-list" id="qaChoices"></div>
-        <p class="hint say-tip" id="hint" aria-live="polite">클라우디아가 ${q.pre ? '말하고' : '묻고'} 있어요…</p>
-        ${canListen ? `<button class="mic" id="mic" type="button">${ICON.mic} 눌러서 대답하기</button>` : ''}
+        <p class="hint say-tip" id="hint" aria-live="polite">클라우디아가 ${q.pre || q.ask ? '말하고' : '묻고'} 있어요…</p>
+        ${canListen ? `<button class="mic" id="mic" type="button">${ICON.mic} ${q.ask ? '눌러서 물어보기' : '눌러서 대답하기'}</button>` : ''}
         ${canListen ? '' : `<form id="typed" class="typed"><input id="typedIn" type="text" autocomplete="off" placeholder="영어로 적어도 돼요" aria-label="영어로 적기"><button class="primary" type="submit">보내기</button></form>`}
       </div>
     </section>`);
@@ -657,7 +666,7 @@ function qaStep(S) {
     on('bubble', () => { if (!$('feedback')) clearSpotlight(); });
     setTimeout(() => { if ($('again')) play(); }, 350);
     carousel($('qaChoices'), q.choices, {
-      action: '이 대답 고르기',
+      action: q.ask ? '이 질문 하기' : '이 대답 고르기',
       soft: true,
       onListen: (c) => { clearSpotlight(); speak(c.en, { rate: S.rate }); },
       onPick: (c) => answered(q, c.en, 'choice', c.ko),
@@ -679,6 +688,11 @@ function qaStep(S) {
     const str = (v) => (typeof v === 'string' ? v.trim() : '');
     let pre = str(r && r.reply_en) || 'Thank you!';
     let preKo = str(r && r.reply_ko) || (r && r.reply_en ? '' : '고마워요!');
+    const task = r && r.ask_task;
+    if (task && str(task.en) && Array.isArray(task.choices)) {
+      const qsn = task.choices.filter((c) => c && str(c.en)).slice(0, 3).map((c) => ({ en: str(c.en), ko: str(c.ko) }));
+      if (qsn.length) return { pre, preKo, q: str(task.en), ko: str(task.ko), choices: qsn, used: q.used, ask: true };
+    }
     const fu = r && r.follow_up;
     const choices = fu && Array.isArray(fu.choices)
       ? fu.choices.filter((c) => c && str(c.en)).slice(0, 3).map((c) => ({ en: str(c.en), ko: str(c.ko) })) : [];
@@ -700,9 +714,10 @@ function qaStep(S) {
     if (got[at] != null) { S.score.qa[0] -= got[at]; S.score.qa[1] -= 1; delete got[at]; }
     const before = S.score.qa[0];
     answers[at] = text;
-    $('area').innerHTML = `<div class="feedback"><p class="label">내가 한 말</p><p class="en" lang="en">${esc(text)}</p><p class="muted">클라우디아가 듣고 있어요…</p></div>`;
+    $('area').innerHTML = `<div class="feedback"><p class="label">${q.ask ? '내가 한 질문' : '내가 한 말'}</p><p class="en" lang="en">${esc(text)}</p><p class="muted">클라우디아가 듣고 있어요…</p></div>`;
     const req = {
       question: q.q, answer: text, level: S.level, topic: S.topic, last, turn: at + 1, total,
+      mode: q.ask ? 'ask' : 'answer', next_ask: canAsk && askAt.has(at + 1), letters: q.ask || askAt.has(at + 1) ? inbox : [],
       history: qs.slice(0, at).map((x, i) => ({ q: x.q, a: answers[i] || '' })),
       ideas: pack.slice(q.used, q.used + 3).map((x) => x.en),
     };
@@ -716,13 +731,16 @@ function qaStep(S) {
     } else {
       try {
         r = await api.ai('check', req);
-        api.addNotes(r.facts, S.topic).catch(() => {});
-        save(S, { kind: 'qa', prompt_en: q.q, answer_en: text, better_en: r.better_en, answer_ko: r.answer_ko });
+        if (!r.can_ask) canAsk = false;
+        if (!q.ask) {   // 내가 한 질문은 자서전 자료로 남기지 않아요
+          api.addNotes(r.facts, S.topic).catch(() => {});
+          save(S, { kind: 'qa', prompt_en: q.q, answer_en: text, better_en: r.better_en, answer_ko: r.answer_ko });
+        }
         S.score.qa[0] += r.good ? 1 : 0.5;
       } catch (e) {
         r = { better_en: '', tip_ko: '' };
         S.score.qa[0] += 0.5;
-        save(S, { kind: 'qa', prompt_en: q.q, answer_en: text });
+        if (!q.ask) save(S, { kind: 'qa', prompt_en: q.q, answer_en: text });
       }
       nextP = Promise.resolve(r);
     }
@@ -739,20 +757,20 @@ function qaStep(S) {
     if (!$('area') || k !== at) return;
     const showBetter = r.better_en && !sameSentence(r.better_en, text);
     $('area').innerHTML = `<div class="feedback" id="feedback">
-        <p class="label">내가 한 말</p>
+        <p class="label">${q.ask ? '내가 한 질문' : '내가 한 말'}</p>
         <p class="en" lang="en">${esc(text)}</p>
         ${r.answer_ko ? `<p class="ko">${esc(r.answer_ko)}</p>` : ''}
         ${showBetter ? `<div class="better">
-            <p class="label">이렇게 말하면 더 좋아요</p>
+            <p class="label">${q.ask ? '이렇게 물어보면 더 좋아요' : '이렇게 말하면 더 좋아요'}</p>
             <p class="en" lang="en">${esc(r.better_en)}</p>
             ${r.better_ko ? `<p class="ko">${esc(r.better_ko)}</p>` : ''}
             <button class="ghost" id="hearBetter" type="button">${ICON.sound} 들어 보기</button>
-          </div>` : '<p class="praise">👍 잘 말했어요!</p>'}
+          </div>` : `<p class="praise">👍 ${q.ask ? '잘 물어봤어요!' : '잘 말했어요!'}</p>`}
         ${r.tip_ko ? `<p class="tip">💡 ${esc(r.tip_ko)}</p>` : ''}
       </div>
       <div class="answer-nav" id="answerNav">
         <button class="plain prev-btn" id="prevQ" type="button" ${at === 0 ? 'disabled' : ''}>이전</button>
-        <button class="plain retry-btn" id="retryQ" type="button">${ICON.mic} 다시 대답하기</button>
+        <button class="plain retry-btn" id="retryQ" type="button">${ICON.mic} ${q.ask ? '다시 물어보기' : '다시 대답하기'}</button>
         <button class="primary next-btn" id="nextQ" type="button">다음</button>
       </div>`;
     if ($('again')) $('again').hidden = true;
