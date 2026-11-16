@@ -341,8 +341,14 @@ async function openUser(id) {
       <div class="row">
         <button class="btn" id="copyMemoir" type="button">자서전 자료 복사</button>
         <button class="btn primary" id="dlMemoir" type="button">자서전 자료 내려받기 (.md)</button>
+        <button class="btn" id="resetUser" type="button">처음 상태로 되돌리기</button>
         <button class="btn danger" id="delUser" type="button">계정 삭제</button>
       </div>
+    </div>
+    <div class="del-confirm" id="resetConfirm" hidden>
+      <span><b>${esc(u.name || u.email)}</b> 계정을 방금 가입한 상태로 되돌릴까요? 이름·태그·실력 테스트·진도와 레슨, 이야기 노트, 자서전 기록이 <b>모두 지워지고 되돌릴 수 없어요.</b> 로그인 정보와 편지는 그대로예요. 다음에 앱을 열면 이름 입력과 처음 질문부터 다시 시작해요.</span>
+      <span class="row"><button class="btn danger" id="resetYes" type="button">되돌리기</button><button class="btn" id="resetNo" type="button">취소</button></span>
+      <span class="muted" id="resetMsg" role="alert"></span>
     </div>
     <div class="del-confirm" id="delConfirm" hidden>
       <span><b>${esc(u.name || u.email)}</b> 계정을 삭제할까요? 바로 들어올 수 없게 되고, 자료는 ${KEEP_DAYS}일 동안 보관돼서 그 안에는 복원할 수 있어요.</span>
@@ -370,7 +376,17 @@ async function openUser(id) {
   </section>`;
 
   backgroundBox(id);
-  $('delUser').addEventListener('click', () => { $('delConfirm').hidden = false; });
+  $('resetUser').addEventListener('click', () => { $('resetConfirm').hidden = false; $('delConfirm').hidden = true; });
+  $('resetNo').addEventListener('click', () => { $('resetConfirm').hidden = true; });
+  $('resetYes').addEventListener('click', async () => {
+    const b = $('resetYes');
+    if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = '정말요? 한 번 더 누르면 지워져요'; return; }
+    b.disabled = true;
+    const { error } = await sb.rpc('admin_reset_user', { uid: id });
+    if (error) { b.disabled = false; $('resetMsg').textContent = '되돌리지 못했어요. 다시 눌러 주세요.'; return; }
+    loadUsers();
+  });
+  $('delUser').addEventListener('click', () => { $('delConfirm').hidden = false; $('resetConfirm').hidden = true; });
   $('delNo').addEventListener('click', () => { $('delConfirm').hidden = true; });
   $('delYes').addEventListener('click', async () => {
     $('delYes').disabled = true;

@@ -287,6 +287,8 @@ export async function boot() {
 // 처음 설정 ---------------------------------------------------------------------------
 register('setup', () => {
   const p = state.profile;
+  // 새로 시작하는 계정: 이 기기에 남은 예전 진행 기록은 지워요
+  try { localStorage.removeItem('wt-progress'); localStorage.removeItem('wt-steplog'); } catch (e) { /* 무시 */ }
   mount(`<section class="screen">
     <h1>반가워요!</h1>
     <p class="sub" lang="en">Welcome!</p>
