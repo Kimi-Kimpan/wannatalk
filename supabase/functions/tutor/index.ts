@@ -30,7 +30,7 @@ const TOPICS: Record<string, string> = {
   future: "The future: things he wants to do, places to visit, hobbies to start, hopes for his family.",
   timemachine: "Time machine: if he could travel to any time and place in the past or future, where and why.",
   likes: "Favourite things: food, music, TV, sports, walks, seasons, places.",
-  sweden: "Sweden and Clara: Clara lives in northern Sweden (snow, cold winters, long dark nights, northern lights, time difference with Korea). He wants to talk with her and maybe visit.",
+  sweden: "Sweden and Klara: Klara lives in northern Sweden (snow, cold winters, long dark nights, northern lights, time difference with Korea). He wants to talk with her and maybe visit.",
   heart: "Feelings and thoughts: health, what makes him happy, gratitude, advice he would give to young people.",
 };
 
@@ -328,8 +328,8 @@ async function checkAnswer(b: any, m?: Meter) {
   const ideas = (Array.isArray(b.ideas) ? b.ideas.slice(0, 3) : []).map((x: any) => `- ${clip(x, 200)}`).join("\n");
   const letters = (Array.isArray(b.letters) ? b.letters.slice(0, 3) : [])
     .map((x: any) => `- From ${clip(x && x.from, 40) || "family"}: "${clip(x && x.body, 300)}"`).join("\n");
-  const useLetters = (asking || nextAsk) && letters
-    ? `\nMessages he recently received from family or friends (use these FIRST as material; only make things up when nothing here fits):\n${letters}\n` : "";
+  const useLetters = letters
+    ? `\nMessages he recently received from family or friends (material for today's talk; he will write a reply to the newest one at the end of the lesson):\n${letters}\n` : "";
   const system = `You are Klaudia, a kind English teacher having one continuous spoken conversation. ${learnerOf(b)} Reply with JSON only.`;
 
   const situation = asking
@@ -340,24 +340,27 @@ Judge it as a QUESTION: is it understandable and correctly formed (word order, d
 The learner answered (from speech recognition or tapping, may have errors): "${clip(b.answer, 300)}"`;
 
   const replySpec = asking
-    ? `"Klaudia's ANSWER to his question, one or two short sentences at his level${last ? ", then a warm goodbye. No question." : ". Do NOT put a question here."}"
-                 // If the question is about something in the messages above, answer with what the message says and name the sender (e.g. 'Clara said it snowed a lot there!').
-                 // If the message does not say, tell him it is a good question to ask that person in his reply. Otherwise answer from Klaudia's own life: ${KLAUDIA_LIFE}`
+    ? `"Klaudia's ANSWER to his question, one or two short sentences at his level, answering about HERSELF${last ? ", then a warm goodbye. No question." : ". Do NOT put a question here."}"
+                 // Answer from Klaudia's own life: ${KLAUDIA_LIFE}
+                 // If the subject came from one of the messages above, she may add that he can ask the sender the same question in his reply.`
     : last
     ? `"Klaudia's warm closing line: react to what he said, thank him for the talk and say goodbye (max 16 words). No question."`
     : `"Klaudia's short warm reaction to what he said (max 10 words). Do NOT put a question here."`;
 
   const nextSpec = last ? `"follow_up": null,`
     : nextAsk
-    ? `"ask_task": {"en": "Klaudia's invitation for HIM to ask a question now: one short line that says what to ask about (e.g. 'Now it is your turn! Ask me about my weekend.')",
-               "ko": "the same in Korean, clearly telling him what to ask (e.g. '이번에는 직접 물어보세요. 클라우디아의 주말이 어땠는지 물어보세요.')",
+    ? `"ask_task": {"en": "Klaudia's invitation for HIM to ask HER a question now: one short line that says what to ask about (e.g. 'Can you ask me about the weather today?')",
+               "ko": "the same in Korean, clearly telling him what to ask (e.g. '이번에는 직접 물어보세요. 클라우디아에게 오늘 날씨가 어떤지 물어보세요.')",
                "choices": [ {"en": "...?", "ko": "..."}, {"en": "...?", "ko": "..."}, {"en": "...?", "ko": "..."} ]},
                // REQUIRED. choices are 3 different correct QUESTIONS he could ask, short and at his level.
-               // If the messages above mention something worth asking about (weather, health, plans, family), make the task about that, naming the sender
-               // (e.g. 'Clara said it snowed. Ask how cold it is there.'). Otherwise ask about Klaudia's life in a way that fits today's conversation.`
-    : `"follow_up": {"en": "Klaudia's next question (ONE short question at his level, max 12 words)", "ko": "Korean meaning",
+               // If the messages above bring up a subject (weather, health, rest, plans, food, family), have him ask Klaudia about THAT SAME subject,
+               // so he practises a question he can reuse in his reply to the sender. Otherwise pick something about Klaudia's life that fits today's conversation.`
+    : `"follow_up": {"en": "Klaudia's next question (ONE short question at his level, max 12 words; one short lead-in sentence before it is allowed)", "ko": "Korean meaning",
                 "choices": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]},
                 // REQUIRED. It must flow naturally from what was just said, like a real conversation.
+                // If a message above has something that fits, build the question on it and name the sender,
+                // e.g. 'Klara said it snowed a lot there. Is it also snowing where you live?' Do this once or twice in a session, not every time
+                // (check the conversation so far), and not for a subject already used.
                 // If the last two questions were already about the same subject, move gently to one of the possible next subjects.
                 // Never repeat a question that was already asked. choices are 3 different short answers he could say, at his level.`;
 
@@ -437,7 +440,7 @@ Return JSON:
 async function readLetter(b: any, m?: Meter) {
   const level = levelOf(b.level);
   const system = `You help a Korean learner read a short English message from family. ${learnerOf(b)} Reply with JSON only.`;
-  const prompt = `Message from ${clip(b.from_name, 40) || "Clara"}:
+  const prompt = `Message from ${clip(b.from_name, 40) || "Klara"}:
 """${clip(b.text, 1500)}"""
 ${LEVELS[level]}
 
@@ -660,7 +663,7 @@ const COMPOSE_TOPICS: Record<string, string> = {
   reply: "reply to the message they received",
 };
 const STEP_TEXT: Record<string, string> = {
-  greet: "a warm greeting line that also opens the message (e.g. 'Hi Clara! I hope you are well.')",
+  greet: "a warm greeting line that also opens the message (e.g. 'Hi Klara! I hope you are well.')",
   body: "the main sentence: what the writer wants to say or ask",
   close: "a short friendly closing line (e.g. 'Talk soon!', 'Take care.')",
 };

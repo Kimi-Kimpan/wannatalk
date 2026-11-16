@@ -1,4 +1,4 @@
-// Screen for family members (e.g. Clara). English UI. Same messaging as the learner.
+// Screen for family members (e.g. Klara). English UI. Same messaging as the learner.
 import { state, register, go, mount, on, $, esc, loading } from './ui.js';
 import * as api from './api.js';
 

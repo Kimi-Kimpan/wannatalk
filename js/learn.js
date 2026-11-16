@@ -615,8 +615,8 @@ function qaStep(S) {
   const answers = [];
   const got = {}; // 문제마다 받은 점수 (다시 대답하면 바꿔 셉니다)
   const full = (q) => (q.pre ? `${q.pre} ${q.q}` : q.q);
-  // 뒤쪽에는 사용자가 클라우디아에게 물어보는 차례가 있어요 (1·2단계는 한 번, 3단계부터 두 번)
-  const askAt = new Set(S.level >= 3 ? [2, 4] : [3]);
+  // 사용자가 클라우디아에게 물어보는 차례가 있어요 (1·2단계는 한 번, 3단계부터 두 번)
+  const askAt = new Set(S.level >= 3 ? [1, 3] : [1]);   // 앞쪽에서 먼저 물어보는 연습을 해요 (마지막 편지 답장에 써먹을 수 있게)
   let canAsk = true;   // 서버가 질문 차례를 지원하지 않으면 예전처럼 대답만 해요
   // 받은 편지 내용을 질문 연습의 소재로 먼저 써요
   let inbox = [];
@@ -717,7 +717,7 @@ function qaStep(S) {
     $('area').innerHTML = `<div class="feedback"><p class="label">${q.ask ? '내가 한 질문' : '내가 한 말'}</p><p class="en" lang="en">${esc(text)}</p><p class="muted">클라우디아가 듣고 있어요…</p></div>`;
     const req = {
       question: q.q, answer: text, level: S.level, topic: S.topic, last, turn: at + 1, total,
-      mode: q.ask ? 'ask' : 'answer', next_ask: canAsk && askAt.has(at + 1), letters: q.ask || askAt.has(at + 1) ? inbox : [],
+      mode: q.ask ? 'ask' : 'answer', next_ask: canAsk && askAt.has(at + 1), letters: inbox,
       history: qs.slice(0, at).map((x, i) => ({ q: x.q, a: answers[i] || '' })),
       ideas: pack.slice(q.used, q.used + 3).map((x) => x.en),
     };
