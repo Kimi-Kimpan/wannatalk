@@ -213,18 +213,22 @@ async function letterStep(S) {
     ];
     for (const g of generic) if (list.length < 2 && g.options.length) list.push(g);
     if (!list.length) list.push({ ko: `${fromName}님에게 하고 싶은 말을 해 봐요.`, options: [{ en: 'Thank you for your letter.', ko: '편지 고마워요.' }] });
-    steps = list.slice(0, 6);
+    steps = list.slice(0, 5);
     const tilesN = Math.ceil(steps.length / 2);
     steps.forEach((x, i) => {
       x.mode = i < tilesN ? 'tiles' : 'speak';
       // 낱말 조각 단계는 짧은 문장이 먼저 오게
       if (x.mode === 'tiles') x.options = x.options.slice().sort((p, q) => nWords(p) - nWords(q));
     });
+    // 마지막에 상대에게 하나 물어보는 단계 (안부, 주말 계획처럼 내 태그에 맞는 질문들)
+    const asks = (plan && Array.isArray(plan.ask) ? plan.ask : []).filter(ok).slice(0, 5)
+      .map((q) => ({ en: q.en.trim(), ko: `${q.label ? `[${String(q.label).trim()}] ` : ''}${q.ko || ''}`, plainKo: q.ko || '' }));
+    if (asks.length) steps.push({ ko: `이번에는 ${fromName}님에게 궁금한 것을 하나 물어봐요.`, options: asks, mode: 'speak', ask: true });
     parts = steps.map(() => ({ items: [] }));
   }
 
   function chips(n) {
-    return steps.map((x, i) => `<span class="${i === n ? 'on' : ''}">${i + 1}${i === n ? (x.mode === 'tiles' ? ' 낱말' : ' 말하기') : ''}</span>`).join('');
+    return steps.map((x, i) => `<span class="${i === n ? 'on' : ''}">${i + 1}${i === n ? (x.ask ? ' 질문' : x.mode === 'tiles' ? ' 낱말' : ' 말하기') : ''}</span>`).join('');
   }
   function frame(n, inner, { bubble = '', compact = false } = {}) {
     mount(`<section class="screen fit letter-reply">
@@ -254,7 +258,7 @@ async function letterStep(S) {
     pop.querySelector('#letterClose').addEventListener('click', close);
     pop.querySelector('#letterHear').addEventListener('click', (e) => speak(L.body, { rate: S.rate, button: e.currentTarget }));
   }
-  const ask = (x) => `${esc(x.ko)} <b>뭐라고 답해 볼까요?</b>`;
+  const ask = (x) => `${esc(x.ko)} <b>${x.ask ? '뭐라고 물어볼까요?' : '뭐라고 답해 볼까요?'}</b>`;
   function done(n, item) {
     if (backTo) parts[n].items.push(item); else parts[n].items = [item];
     clearSpotlight();
@@ -367,7 +371,7 @@ async function letterStep(S) {
   // 말하기 단계: 예시 카드 안에 '예시 쓰기', 아래에 이전 단계 · 마이크 · 건너뛰기
   function speakStep(n) {
     const x = steps[n];
-    frame(n, `<p class="pick-tip">아래 예시를 고르거나, 직접 말해주세요 · 한국어로 말해도 돼요</p>
+    frame(n, `<p class="pick-tip">${x.ask ? '아래 예시를 고르거나, 직접 물어보세요 · 한국어로 말해도 돼요' : '아래 예시를 고르거나, 직접 말해주세요 · 한국어로 말해도 돼요'}</p>
       <div class="sugg-list" id="opts"></div>
       <p class="hint" id="hint" aria-live="polite"></p>
       <div class="compose-dock bottom">${backBtn(n)}${micBtn()}<button class="round-ghost" id="skipStep" type="button">건너뛰기</button></div>`,
@@ -375,10 +379,10 @@ async function letterStep(S) {
     bindBack(n);
     on('skipStep', () => (backTo ? (backTo = false, summary()) : n + 1 < steps.length ? runStep(n + 1) : summary()));
     carousel($('opts'), x.options, {
-      action: '예시 쓰기',
+      action: x.ask ? '이 질문 쓰기' : '예시 쓰기',
       soft: true,
       onListen: (o) => speak(o.en, { rate: S.rate }),
-      onPick: (o) => done(n, { en: o.en, ko: o.ko || '' }),
+      onPick: (o) => done(n, { en: o.en, ko: o.plainKo != null ? o.plainKo : (o.ko || '') }),
     });
     bindVoice(n);
   }
@@ -408,7 +412,7 @@ async function letterStep(S) {
       ${header(S, 0.9)}
       <h2>이렇게 보낼게요 <button class="letter-link inline" id="seeLetter" type="button">편지 보기 ▾</button></h2>
       <div class="sum-list">${steps.map((x, i) => `<div class="sum-part">
-        <div class="sum-head"><span class="label">${i + 1}. ${x.mode === 'tiles' ? '낱말로 만든 문장' : '말로 한 문장'}</span>
+        <div class="sum-head"><span class="label">${i + 1}. ${x.ask ? '물어본 말' : x.mode === 'tiles' ? '낱말로 만든 문장' : '말로 한 문장'}</span>
           <span class="sum-btns">
             <button class="ghost sum-add" type="button" data-i="${i}" aria-label="${i + 1}번에 더 붙이기">＋</button>
             <button class="ghost sum-edit" type="button" data-i="${i}">수정</button>

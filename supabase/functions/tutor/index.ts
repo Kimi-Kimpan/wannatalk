@@ -693,10 +693,13 @@ Return JSON:
   "body":  [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ],
   "close": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]${b.reply_to ? `,
   "letter_ko": "natural Korean translation of the message being replied to",
-  "points": [ {"ko": "one thing in their message worth answering, as ONE full natural Korean sentence that starts with the SENDER's name as the subject and says what the sender wrote: '<sender>님이 ...라고 했어요.' (e.g. 'Klara님이 두 사람도 오늘은 편히 쉬면 좋겠다고 했어요.'). Never write it from the learner's side and never leave out who said it.", "body": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]} ]   // one point per distinct thing in the message (1 to 5 points), each with 3 different short one-sentence answers (max 8 words)` : ""}
+  "points": [ {"ko": "one thing in their message worth answering, as ONE full natural Korean sentence that starts with the SENDER's name as the subject and says what the sender wrote: '<sender>님이 ...라고 했어요.' (e.g. 'Klara님이 두 사람도 오늘은 편히 쉬면 좋겠다고 했어요.'). Never write it from the learner's side and never leave out who said it.", "body": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]} ],   // one point per distinct thing in the message (1 to 5 points), each with 3 different short one-sentence answers (max 8 words)
+  "ask": [ {"label": "...", "en": "...?", "ko": "..."} ]   // 4 different short QUESTIONS the writer could ask the reader in this reply (max 8 words each), so the conversation keeps going.
+           // "label" is a short Korean name for what it asks (e.g. '오늘 하루 안부 묻기', '주말 계획 묻기', '저녁 메뉴 묻기', '가족 안부 묻기', '자유롭게 묻기').
+           // Choose subjects that fit the writer's background (family, grandchildren, hobbies, work) and this message. Do not ask what the message already answered.` : ""}
 }
 "ko" is the natural Korean meaning (polite). The three options in each part should be clearly different.`;
-  return await gemini(system, prompt, 0.8, b.reply_to ? 2200 : 1200, m);
+  return await gemini(system, prompt, 0.8, b.reply_to ? 2800 : 1200, m);
 }
 
 // 사용량 적기 (실패해도 앱에는 영향 없음)
