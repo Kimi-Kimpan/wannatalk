@@ -28,13 +28,16 @@ export function mount(html, cls = '') {
 }
 
 // 스크롤 없는 화면(.screen.fit)이 넘치면 한 단계씩 작게 (글씨를 크게 해 둔 휴대폰용)
+const FIT_BASE = 'tight';
 export function fitScreen() {
   const s = document.querySelector('#app > .screen.fit');
   if (!s) return;
-  s.classList.remove('tight', 'tighter');
+  // 기본 크기는 하나('tight')로 통일해요: 화면마다 글씨 크기가 달라지지 않게.
+  // 그래도 넘치는 작은 화면에서만 한 단계 더 줄여요. (되돌리려면 FIT_BASE를 ''로)
   const over = () => s.scrollHeight > s.clientHeight + 1;
-  if (!over()) return;
-  s.classList.add('tight');
+  s.classList.remove('tighter');
+  if (FIT_BASE) s.classList.add(FIT_BASE);
+  else { s.classList.remove('tight'); if (!over()) return; s.classList.add('tight'); }
   if (over()) s.classList.add('tighter');
 }
 let fitQueued = false;
