@@ -830,3 +830,21 @@ body.sheet-open { overflow: hidden; }
 .fold .fold-toggle small { font-size: 16px; font-weight: 500; }
 .fold .fold-body { margin-top: 10px; }
 .fold .fold-scroll { max-height: min(50vh, 420px); overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+/* 편지함: 메신저처럼 사람별 목록 */
+.conv-list { display: flex; flex-direction: column; gap: 8px; }
+.conv-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 76px; padding: 10px 12px; text-align: left; background: var(--card); border: 2px solid var(--line); border-radius: 18px; color: var(--ink); }
+.conv-face { flex: 0 0 52px; height: 52px; border-radius: 50%; background: color-mix(in srgb, var(--primary) 30%, var(--card)); display: grid; place-items: center; font-size: 24px; font-weight: 800; }
+.conv-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.conv-main b { font-size: 21px; }
+.conv-last { font-size: 17px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-last.fresh { color: var(--ink); font-weight: 700; }
+.conv-side { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.conv-date { font-size: 14px; color: var(--ink-soft); }
+.thread-page .chat-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 10px; padding: 4px 2px; }
+.thread-page .big { flex-shrink: 0; }
+/* 설정: 이름 옆 연필 */
+.name-row { display: flex; align-items: center; gap: 10px; }
+.name-now { flex: 1; min-width: 0; font-size: 24px; font-weight: 700; overflow-wrap: anywhere; }
+.name-row input { flex: 1; min-width: 0; }
+.icon-btn { flex: 0 0 52px; width: 52px; min-height: 52px; padding: 0; display: grid; place-items: center; border-radius: 14px; }
+.icon-btn.on { background: var(--primary); color: var(--primary-ink, #fff); }

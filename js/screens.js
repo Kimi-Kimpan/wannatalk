@@ -509,6 +509,8 @@ register('home', async () => {
 });
 
 // 설정 ------------------------------------------------------------------------------
+const PENCIL = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M13 7l4 4" stroke="currentColor" stroke-width="2"/></svg>';
+const CHECK = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 register('settings', async () => {
   const p = state.profile;
   mount(`<section class="screen scroll">
@@ -519,10 +521,13 @@ register('settings', async () => {
 
     <form class="panel form" id="nameForm" novalidate>
       <h2>내 이름</h2>
+      <div class="name-row">
+        <span class="name-now" id="nameNow">${esc(p.name || '')}</span>
+        <input id="nameIn" type="text" maxlength="40" value="${esc(p.name || '')}" aria-label="내 이름" hidden>
+        <button class="ghost icon-btn" id="nameEdit" type="button" aria-label="이름 수정">${PENCIL}</button>
+      </div>
       <p class="muted">편지를 받는 사람에게 이 이름으로 보여요.</p>
-      <input id="nameIn" type="text" maxlength="40" value="${esc(p.name || '')}" aria-label="내 이름">
       <p class="msg" id="nameMsg" role="status"></p>
-      <button class="plain mid" type="submit">이름 저장</button>
     </form>
 
     <div class="panel fold">
@@ -564,10 +569,8 @@ register('settings', async () => {
         : '<p class="muted">크롬 오른쪽 위 ⋮ 메뉴 → <b>홈 화면에 추가</b>를 누르세요. 이미 추가했다면 그대로 쓰시면 돼요.</p>'}
     </div>
 
-    <div class="panel fold">
-      <button class="past-toggle fold-toggle" type="button" aria-expanded="false" data-fold="lettersBody">
-        <span>주고받은 편지 <small class="muted" id="lettersCount"></small></span><span class="arrow" aria-hidden="true">▾</span></button>
-      <div id="letters" class="letters fold-body fold-scroll" hidden data-body="lettersBody"><p class="muted">불러오는 중…</p></div>
+    <div class="panel">
+      <button class="past-toggle" id="openMail" type="button"><span>✉️ 편지함</span><span class="arrow" aria-hidden="true">›</span></button>
     </div>
 
     <div id="adminBox"></div>
@@ -587,13 +590,28 @@ register('settings', async () => {
     t.setAttribute('aria-expanded', String(!body.hidden));
     if (!body.hidden) t.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }));
-  $('nameForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
+  on('openMail', () => go('message', { from: 'settings' }));
+  // 이름: 연필을 누르면 고칠 수 있고, 체크를 누르면 저장돼요
+  let editing = false;
+  async function nameToggle() {
+    if (!editing) {
+      editing = true;
+      $('nameNow').hidden = true; $('nameIn').hidden = false; $('nameIn').focus();
+      $('nameEdit').innerHTML = CHECK; $('nameEdit').setAttribute('aria-label', '이름 저장'); $('nameEdit').classList.add('on');
+      return;
+    }
     const name = $('nameIn').value.trim().slice(0, 40);
     if (!name) { $('nameMsg').textContent = '이름을 적어 주세요.'; return; }
-    try { state.profile = await api.updateProfile(state.user.id, { name }); $('nameMsg').textContent = '저장했어요.'; }
-    catch (err) { $('nameMsg').textContent = '저장하지 못했어요. 다시 눌러 주세요.'; }
-  });
+    try {
+      if (name !== state.profile.name) state.profile = await api.updateProfile(state.user.id, { name });
+      editing = false;
+      $('nameNow').textContent = name; $('nameNow').hidden = false; $('nameIn').hidden = true;
+      $('nameEdit').innerHTML = PENCIL; $('nameEdit').setAttribute('aria-label', '이름 수정'); $('nameEdit').classList.remove('on');
+      $('nameMsg').textContent = '저장했어요.';
+    } catch (err) { $('nameMsg').textContent = '저장하지 못했어요. 다시 눌러 주세요.'; }
+  }
+  on('nameEdit', nameToggle);
+  $('nameForm').addEventListener('submit', (e) => { e.preventDefault(); nameToggle(); });
   $('idForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const say = (x) => { $('idMsg').textContent = x; };
@@ -652,16 +670,4 @@ register('settings', async () => {
   adminBox(false);
   api.isAdmin().then((yes) => { if (yes) adminBox(true); }).catch(() => {});
 
-  try {
-    const [letters, members] = await Promise.all([api.myLetters(state.user.id, 20), api.myContacts()]);
-    const names = Object.fromEntries(members.map((m) => [m.id, m.name]));
-    const box = $('letters');
-    if (!box) return;
-    if ($('lettersCount')) $('lettersCount').textContent = letters.length ? `· ${letters.length}통` : '';
-    box.innerHTML = letters.length
-      ? letters.map((l) => `<div class="letter-item ${l.from_id === state.user.id ? 'mine' : ''}">
-          <div class="from">${l.from_id === state.user.id ? '내가 보냄' : esc(names[l.from_id] || '가족') + '님이 보냄'} · <span class="muted">${new Date(l.created_at).toLocaleDateString('ko-KR')}</span></div>
-          <div lang="en">${esc(l.body)}</div></div>`).join('')
-      : '<p class="muted">아직 편지가 없어요.</p>';
-  } catch (e) { /* 무시 */ }
 });

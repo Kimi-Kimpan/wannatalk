@@ -95,7 +95,8 @@ export function wordDiff(a, b) {
 }
 export const hasHangul = (x) => /[\u3131-\uD79D]/.test(String(x || ''));
 
-register('message', (opts) => start(opts || {}));
+let origin = null; // 설정에서 열었으면 돌아갈 때 설정으로
+register('message', (opts) => { origin = (opts && opts.from) || null; start(opts || {}); });
 
 function lang() { return state.profile && state.profile.role === 'friend' ? 'en' : 'ko'; }
 function home() { go(state.profile && state.profile.role === 'friend' ? 'friend' : 'home'); }
@@ -143,67 +144,54 @@ async function pickRecipient(msg = '') {
       <p class="msg" id="msg" role="alert">${esc(msg)}</p>
       <button class="big primary" id="addBtn" type="submit">${t.add}</button>
     </form>`;
+  // 메신저처럼: 사람마다 한 줄, 누르면 그 사람과의 대화가 열려요
+  const rows = threads.concat(contacts.filter((c) => !tmap[c.id]).map((c) => ({ id: c.id, name: c.name || '?', contact: c, msgs: [] })));
+  const day = (d) => {
+    const x = new Date(d), now = new Date();
+    return x.toDateString() === now.toDateString()
+      ? x.toLocaleTimeString(lang() === 'ko' ? 'ko-KR' : 'en-GB', { hour: 'numeric', minute: '2-digit' })
+      : x.toLocaleDateString(lang() === 'ko' ? 'ko-KR' : 'en-GB', { month: 'short', day: 'numeric' });
+  };
   mount(`<section class="screen scroll mailbox" lang="${lang()}">
     <div class="bar">
       <button class="ghost" id="quit" type="button">${t.back}</button>
       <div class="step-label">${t.mailbox}</div>
     </div>
-    <h1>${t.who}</h1>
-    ${contacts.length
-      ? `<div class="stack">${contacts.map((c, i) => `<button class="big primary contact-btn" type="button" data-i="${i}">✉️ ${esc(t.sendTo(c.name || '?'))}</button>`).join('')}</div>
-         <details class="add-more" ${msg ? 'open' : ''}><summary>${t.addTitle}</summary>${addForm}</details>`
-      : `<p class="muted">${t.noContacts}</p><div class="panel"><h2>${t.addTitle}</h2>${addForm}</div>`}
-
-    <h2 class="list-title">${t.history}</h2>
-    <div class="threads">${threads.length ? threads.map((th, ti) => {
+    ${rows.length ? `<div class="conv-list">${rows.map((th, ti) => {
       const last = th.msgs[th.msgs.length - 1];
-      const prev = th.msgs[th.msgs.length - 2];
-      const shown = last.from_id === me && prev && prev.from_id !== me ? [prev, last] : [last];
-      const more = th.msgs.length - shown.length;
-      return `<div class="thread">
-        <div class="thread-head"><b>${esc(th.name)}</b>${last.from_id !== me ? (last.handled_at ? '' : ` <span class="count-pill">${t.newMark}</span>`) : ` <span class="muted">· ${esc(t.waiting)}</span>`}</div>
-        ${shown.map((l) => bubble(l)).join('')}
-        <div class="row">
-          ${last.from_id !== me && th.contact ? `<button class="big primary thread-reply" type="button" data-t="${ti}">${t.reply}</button>` : ''}
-          ${more > 0 ? `<button class="big plain thread-all" type="button" data-t="${ti}">${t.seeAll} (${th.msgs.length})</button>` : ''}
-        </div>
-      </div>`;
-    }).join('') : `<p class="muted">${t.noLetters}</p>`}</div>
-
+      const fresh = last && last.from_id !== me && !last.handled_at;
+      return `<button class="conv-row" type="button" data-t="${ti}">
+        <span class="conv-face" aria-hidden="true">${esc(String(th.name).trim().charAt(0).toUpperCase() || '?')}</span>
+        <span class="conv-main"><b>${esc(th.name)}</b>
+          <span class="conv-last ${fresh ? 'fresh' : ''}" ${last ? 'lang="en"' : ''}>${last ? (last.from_id === me ? `${t.me}: ` : '') + esc(last.body) : esc(t.noLetters)}</span></span>
+        <span class="conv-side">${last ? `<span class="conv-date">${day(last.created_at)}</span>` : ''}${fresh ? `<span class="count-pill">${t.newMark}</span>` : ''}</span>
+      </button>`;
+    }).join('')}</div>
+    <details class="add-more" ${msg ? 'open' : ''}><summary>${t.addTitle}</summary>${addForm}</details>`
+      : `<p class="muted">${t.noContacts}</p><div class="panel"><h2>${t.addTitle}</h2>${addForm}</div>`}
     ${code ? `<div class="panel"><p class="label">${t.myCode}</p><p class="family-code">${esc(code)}</p><p class="muted">${t.myCodeHelp}</p></div>` : ''}
   </section>`);
-  on('quit', home);
-  document.querySelectorAll('.contact-btn').forEach((b) => b.addEventListener('click', () => pickTopic(contacts[Number(b.dataset.i)])));
-  const bindHear = (root) => root.querySelectorAll('.hear-btn').forEach((b) => b.addEventListener('click', () => speak(letters[Number(b.dataset.i)].body, { rate: 0.85, button: b })));
-  bindHear(document);
-  document.querySelectorAll('.thread-reply').forEach((b) => b.addEventListener('click', () => {
-    const th = threads[Number(b.dataset.t)];
-    writeMessage(th.contact, 'reply', th.msgs[th.msgs.length - 1]);
-  }));
-  // 전체 대화: 화면 전체를 덮는 창에서 위아래로 넘겨 보기
-  document.querySelectorAll('.thread-all').forEach((b) => b.addEventListener('click', () => {
-    const th = threads[Number(b.dataset.t)];
+  on('quit', () => (origin === 'settings' ? go('settings') : home()));
+  document.querySelectorAll('.conv-row').forEach((b) => b.addEventListener('click', () => openThread(rows[Number(b.dataset.t)])));
+
+  // 한 사람과의 대화 화면: 대화만 위아래로 넘기고, 버튼은 아래에 고정
+  function openThread(th) {
     const last = th.msgs[th.msgs.length - 1];
-    const sheet = document.createElement('div');
-    sheet.className = 'sheet';
-    sheet.setAttribute('role', 'dialog');
-    sheet.setAttribute('aria-modal', 'true');
-    sheet.innerHTML = `<div class="sheet-inner" lang="${lang()}">
-      <div class="bar"><b class="sheet-title">${esc(th.name)}</b><button class="ghost" id="sheetClose" type="button">${t.close}</button></div>
-      <div class="sheet-list">${th.msgs.map((l) => bubble(l)).join('')}</div>
-      ${last.from_id !== me && th.contact ? `<button class="big primary" id="sheetReply" type="button">${t.reply}</button>` : ''}
-    </div>`;
-    document.body.appendChild(sheet);
-    document.body.classList.add('sheet-open');
-    bindHear(sheet);
-    const close = () => { sheet.remove(); document.body.classList.remove('sheet-open'); };
-    sheet.querySelector('#sheetClose').addEventListener('click', close);
-    const r = sheet.querySelector('#sheetReply');
-    if (r) r.addEventListener('click', () => { close(); writeMessage(th.contact, 'reply', last); });
-    const list = sheet.querySelector('.sheet-list');
+    const canReply = last && last.from_id !== me && th.contact;
+    mount(`<section class="screen fit thread-page" lang="${lang()}">
+      <div class="bar">
+        <button class="ghost" id="quit" type="button">${t.back}</button>
+        <div class="step-label">${esc(th.name)}</div>
+      </div>
+      <div class="chat-list" id="chatList">${th.msgs.length ? th.msgs.map((l) => bubble(l)).join('') : `<p class="muted">${t.noLetters}</p>`}</div>
+      ${th.contact ? `<button class="big primary" id="threadGo" type="button">✉️ ${canReply ? t.reply : esc(t.sendTo(th.name))}</button>` : ''}
+    </section>`);
+    on('quit', () => pickRecipient());
+    document.querySelectorAll('.hear-btn').forEach((b) => b.addEventListener('click', () => speak(letters[Number(b.dataset.i)].body, { rate: 0.85, button: b })));
+    on('threadGo', () => (canReply ? writeMessage(th.contact, 'reply', last) : pickTopic(th.contact)));
+    const list = $('chatList');
     list.scrollTop = list.scrollHeight;
-    sheet.querySelector('#sheetClose').focus();
-  }));
+  }
   $('addForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const c = $('code').value.trim().toUpperCase();
