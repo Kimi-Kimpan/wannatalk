@@ -154,6 +154,12 @@ export async function currentUser() {
   const { data } = await sb.auth.getSession();
   return data.session ? data.session.user : null;
 }
+// 내 자료만 읽도록 항상 내 아이디로 걸러요 (관리자 계정은 다른 사람 자료도 읽을 수 있어서 꼭 필요해요)
+async function myId() {
+  const u = await currentUser();
+  if (!u) throw new Error('not signed in');
+  return u.id;
+}
 export async function signOut() {
   seenFacts.clear();
   factsLoaded = false;
@@ -195,7 +201,7 @@ export async function familyMembers(family) {
 
 // 이야기 노트 ---------------------------------------------------------------------
 export async function recentNotes(limit = 40) {
-  const { data, error } = await sb.from('story_notes').select('fact').order('created_at', { ascending: false }).limit(limit);
+  const { data, error } = await sb.from('story_notes').select('fact').eq('user_id', await myId()).order('created_at', { ascending: false }).limit(limit);
   if (error) return [];
   return (data || []).map((r) => r.fact);
 }
@@ -220,13 +226,13 @@ export async function addNotes(facts, topic) {
 
 // 하루 패키지 ---------------------------------------------------------------------
 export async function getPack(day) {
-  const { data, error } = await sb.from('daily_packs').select('*').eq('day', day).maybeSingle();
+  const { data, error } = await sb.from('daily_packs').select('*').eq('user_id', await myId()).eq('day', day).maybeSingle();
   if (error) throw error;
   return data;
 }
 // 마친 레슨 목록 (최근 것부터)
 export async function donePacks(limit = 12) {
-  const { data, error } = await sb.from('daily_packs').select('day,topic,done_at').not('done_at', 'is', null).order('day', { ascending: false }).limit(limit);
+  const { data, error } = await sb.from('daily_packs').select('day,topic,done_at').eq('user_id', await myId()).not('done_at', 'is', null).order('day', { ascending: false }).limit(limit);
   if (error) throw error;
   return data || [];
 }
@@ -240,10 +246,10 @@ export async function savePack(day, level, topic, content) {
   return data;
 }
 export async function finishPack(id, score) {
-  await sb.from('daily_packs').update({ score, done_at: new Date().toISOString() }).eq('id', id);
+  await sb.from('daily_packs').update({ score, done_at: new Date().toISOString() }).eq('id', id).eq('user_id', await myId());
 }
 export async function cycleScores(fromDay, toDay) {
-  const { data } = await sb.from('daily_packs').select('day,score').gte('day', fromDay).lte('day', toDay);
+  const { data } = await sb.from('daily_packs').select('day,score').eq('user_id', await myId()).gte('day', fromDay).lte('day', toDay);
   return (data || []).map((r) => r.score && typeof r.score.total === 'number' ? r.score.total : null).filter((x) => x !== null);
 }
 
@@ -297,12 +303,6 @@ export async function myLetters(uid, limit = 40) {
   if (error) throw error;
   return data || [];
 }
-export async function familyLetters(limit = 30) {
-  const { data, error } = await sb.from('letters').select('*').order('created_at', { ascending: false }).limit(limit);
-  if (error) throw error;
-  return data || [];
-}
-
 // 자서전 자료 (인터뷰 대답 원문) ----------------------------------------------------
 export async function addEntry(row) {
   if (!row || !row.answer_en) return;
