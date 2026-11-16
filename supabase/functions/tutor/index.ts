@@ -326,10 +326,6 @@ async function checkAnswer(b: any, m?: Meter) {
   const history = (Array.isArray(b.history) ? b.history.slice(-6) : [])
     .map((x: any) => `Klaudia: ${clip(x && x.q, 200)}\nLearner: ${clip(x && x.a, 200)}`).join("\n");
   const ideas = (Array.isArray(b.ideas) ? b.ideas.slice(0, 3) : []).map((x: any) => `- ${clip(x, 200)}`).join("\n");
-  const letters = (Array.isArray(b.letters) ? b.letters.slice(0, 3) : [])
-    .map((x: any) => `- From ${clip(x && x.from, 40) || "family"}: "${clip(x && x.body, 300)}"`).join("\n");
-  const useLetters = letters
-    ? `\nMessages he recently received from family or friends (material for today's talk; he will write a reply to the newest one at the end of the lesson):\n${letters}\n` : "";
   const system = `You are Klaudia, a kind English teacher having one continuous spoken conversation. ${learnerOf(b)} Reply with JSON only.`;
 
   const situation = asking
@@ -341,26 +337,22 @@ The learner answered (from speech recognition or tapping, may have errors): "${c
 
   const replySpec = asking
     ? `"Klaudia's ANSWER to his question, one or two short sentences at his level, answering about HERSELF${last ? ", then a warm goodbye. No question." : ". Do NOT put a question here."}"
-                 // Answer from Klaudia's own life: ${KLAUDIA_LIFE}
-                 // If the subject came from one of the messages above, she may add that he can ask the sender the same question in his reply.`
+                 // Answer from Klaudia's own life: ${KLAUDIA_LIFE}`
     : last
     ? `"Klaudia's warm closing line: react to what he said, thank him for the talk and say goodbye (max 16 words). No question."`
     : `"Klaudia's short warm reaction to what he said (max 10 words). Do NOT put a question here."`;
 
   const nextSpec = last ? `"follow_up": null,`
     : nextAsk
-    ? `"ask_task": {"en": "Klaudia's invitation for HIM to ask HER a question now: one short line that says what to ask about (e.g. 'Can you ask me about the weather today?')",
-               "ko": "the same in Korean, clearly telling him what to ask (e.g. '이번에는 직접 물어보세요. 클라우디아에게 오늘 날씨가 어떤지 물어보세요.')",
+    ? `"ask_task": {"en": "Klaudia's invitation for HIM to ask HER a question now: one short line that says what to ask about (e.g. 'Now it is your turn. Can you ask me about my morning?')",
+               "ko": "the same in Korean, clearly telling him what to ask (e.g. '이번에는 직접 물어보세요. 클라우디아의 아침이 어떤지 물어보세요.')",
                "choices": [ {"en": "...?", "ko": "..."}, {"en": "...?", "ko": "..."}, {"en": "...?", "ko": "..."} ]},
-               // REQUIRED. choices are 3 different correct QUESTIONS he could ask, short and at his level.
-               // If the messages above bring up a subject (weather, health, rest, plans, food, family), have him ask Klaudia about THAT SAME subject,
-               // so he practises a question he can reuse in his reply to the sender. Otherwise pick something about Klaudia's life that fits today's conversation.`
-    : `"follow_up": {"en": "Klaudia's next question (ONE short question at his level, max 12 words; one short lead-in sentence before it is allowed)", "ko": "Korean meaning",
+               // REQUIRED. Stay on today's topic and on what you have just been talking about, so he can turn the sentences he practised into questions.
+               // choices are 3 different correct QUESTIONS he could ask, short and at his level.`
+    : `"follow_up": {"en": "Klaudia's next question (ONE short question at his level, max 12 words)", "ko": "Korean meaning",
                 "choices": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]},
-                // REQUIRED. It must flow naturally from what was just said, like a real conversation.
-                // If a message above has something that fits, build the question on it and name the sender,
-                // e.g. 'Klara said it snowed a lot there. Is it also snowing where you live?' Do this once or twice in a session, not every time
-                // (check the conversation so far), and not for a subject already used.
+                // REQUIRED. It must flow naturally from what was just said, like a real conversation, and stay on today's topic.${asking ? `
+                // He has just asked YOU a question, so a natural next step is to turn a similar question back to him.` : ""}
                 // If the last two questions were already about the same subject, move gently to one of the possible next subjects.
                 // Never repeat a question that was already asked. choices are 3 different short answers he could say, at his level.`;
 
@@ -369,7 +361,6 @@ ${b.tapped ? "He tapped a suggested line, so it is already correct: good is true
 ${LEVELS[level]}
 ${last ? "This was the LAST exchange of today's session."
     : `The conversation continues. Possible next subjects when it is time to move on:\n${ideas || "- (anything about today's topic)"}`}
-${useLetters}
 Return JSON:
 {
   "good": true or false,          // true if the meaning is understandable, even with small mistakes

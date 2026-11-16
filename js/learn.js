@@ -607,7 +607,7 @@ function qaStep(S) {
   // 하나의 이어지는 대화예요: 대답하면 클라우디아가 반응하고 바로 이어서 물어요.
   // qs[k] = { pre: 앞 대답에 대한 반응, q: 질문, ko, choices, used: 여기까지 쓴 준비된 질문 수 }
   const pack = S.c.questions;
-  const total = QA_TURNS;
+  const total = S.level >= 5 ? QA_TURNS + 1 : QA_TURNS;
   const fromPack = (i, pre = '', preKo = '') => ({ pre, preKo, q: pack[i].en, ko: pack[i].ko, choices: pack[i].choices, used: i + 1 });
   let k = startAt(S, total);
   const qs = [];
@@ -615,16 +615,12 @@ function qaStep(S) {
   const answers = [];
   const got = {}; // 문제마다 받은 점수 (다시 대답하면 바꿔 셉니다)
   const full = (q) => (q.pre ? `${q.pre} ${q.q}` : q.q);
-  // 사용자가 클라우디아에게 물어보는 차례가 있어요 (1·2단계는 한 번, 3단계부터 두 번)
-  const askAt = new Set(S.level >= 3 ? [1, 3] : [1]);   // 앞쪽에서 먼저 물어보는 연습을 해요 (마지막 편지 답장에 써먹을 수 있게)
-  let canAsk = true;   // 서버가 질문 차례를 지원하지 않으면 예전처럼 대답만 해요
-  // 받은 편지 내용을 질문 연습의 소재로 먼저 써요
-  let inbox = [];
-  Promise.all([api.myLetters(state.user.id, 30), api.myContacts()]).then(([ls, cs]) => {
-    const names = Object.fromEntries(cs.map((c) => [c.id, c.name]));
-    inbox = ls.filter((l) => l.from_id !== state.user.id).slice(0, 3).map((l) => ({ from: names[l.from_id] || '', body: String(l.body || '').slice(0, 300) }));
-  }).catch(() => {});
   const fullKo = (q) => (q.preKo ? `${q.preKo} ${q.ko}` : q.ko);
+  // 사용자가 클라우디아에게 물어보는 차례: 말하기에 익숙해진 뒤쪽에 넣고, 단계가 오를수록 주고받기가 늘어요
+  //   1·2단계  대답 4번 → 질문 → 대답            3·4단계  대답 2번 → 질문 → 대답 → 질문 → 대답
+  //   5단계~   대답 → 질문 → 대답 → 질문 → 대답 → 질문 → 대답 (한 번 더 길게)
+  const askAt = new Set(S.level >= 5 ? [1, 3, 5] : S.level >= 3 ? [2, 4] : [4]);
+  let canAsk = true;   // 서버가 질문 차례를 지원하지 않으면 예전처럼 대답만 해요
 
   // 클라우디아가 말한 뒤: 마이크만 밝게
   function yourTurn() {
@@ -717,7 +713,7 @@ function qaStep(S) {
     $('area').innerHTML = `<div class="feedback"><p class="label">${q.ask ? '내가 한 질문' : '내가 한 말'}</p><p class="en" lang="en">${esc(text)}</p><p class="muted">클라우디아가 듣고 있어요…</p></div>`;
     const req = {
       question: q.q, answer: text, level: S.level, topic: S.topic, last, turn: at + 1, total,
-      mode: q.ask ? 'ask' : 'answer', next_ask: canAsk && askAt.has(at + 1), letters: inbox,
+      mode: q.ask ? 'ask' : 'answer', next_ask: canAsk && askAt.has(at + 1),
       history: qs.slice(0, at).map((x, i) => ({ q: x.q, a: answers[i] || '' })),
       ideas: pack.slice(q.used, q.used + 3).map((x) => x.en),
     };
