@@ -306,7 +306,8 @@ async function letterStep(S) {
     on('play', () => say(readable(L), S));
     on('slow', () => say(readable(L), S, 'play', true));
     bindLetterToggles();
-    on('later', async () => { try { await api.markLetter(L.id); } catch (e) { /* 무시 */ } nextStep(S); });
+    // 나중에 답장: 읽음 처리하지 않아요. 답장할 때까지 다음 레슨 끝에도 다시 물어봐요
+    on('later', () => nextStep(S));
     on('write', async () => {
       if (!plan) { loading('클라우디아가 답장 쓸 준비를 하고 있어요…'); await planP; }
       if (!steps.length) buildSteps();
