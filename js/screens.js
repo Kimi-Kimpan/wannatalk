@@ -739,10 +739,16 @@ register('settings', async () => {
       box.innerHTML = `<div class="panel admin-panel">
         <h2>관리자</h2>
         <p class="muted">${meAdmin ? '지금 계정이 관리자 계정이에요.' : '관리자 계정이 연결돼 있어요. 학습자 로그인은 그대로 둔 채 오갈 수 있어요.'}</p>
-        <a class="big primary admin-link" href="admin.html">관리자 화면으로 전환</a>
-        ${meAdmin ? '' : '<button class="plain mid" id="unlinkAdmin" type="button">관리자 계정 연결 끊기</button>'}
+        <a class="big primary admin-link" href="admin.html">대시보드</a>
+        ${meAdmin ? '<button class="big plain" id="toKo" type="button">한국어 학습으로 전환 <small class="muted">(영어 화면)</small></button>' : '<button class="plain mid" id="unlinkAdmin" type="button">관리자 계정 연결 끊기</button>'}
       </div>`;
       on('unlinkAdmin', () => { api.disconnectAdmin(); adminBox(false); });
+      // 관리자는 영어 학습 ↔ 한국어 학습 프로그램을 오가며 확인할 수 있어요
+      on('toKo', async () => {
+        $('toKo').disabled = true;
+        try { state.profile = await api.updateProfile(state.user.id, { learn_lang: 'ko' }); boot(); }
+        catch (e) { $('toKo').disabled = false; }
+      });
     } else {
       box.innerHTML = '<a class="link-btn" href="admin.html">관리자 계정 연결하기</a>';
     }

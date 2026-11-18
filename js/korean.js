@@ -5,6 +5,7 @@ import { speak } from './speech.js';
 import { letterBody, bindLetterToggles, readable } from './message.js';
 import * as api from './api.js';
 import { keysDone, KEY_UNITS } from './kokeys.js';
+import { boot } from './screens.js';
 
 // 한글 키보드 과정: 하루 한 단원, 마친 단원은 다시 할 수 있어요
 function keysCard() {
@@ -104,12 +105,28 @@ register('ko-settings', async () => {
       <p class="family-code" id="myCode">${esc(p.code || '…')}</p>
       <p class="muted">Share it so family can add you and write to you.</p>
     </div>
+    <div id="adminBox"></div>
     <div class="panel">
       <p class="muted">Learning: <b>Korean</b></p>
       <button class="big plain" id="logout" type="button">Sign out</button>
     </div>
   </section>`);
   on('back', () => go('ko-home'));
+  // 관리자: 대시보드, 영어 학습 프로그램으로 전환
+  api.isAdmin().then((yes) => {
+    if (!yes || !$('adminBox')) return;
+    $('adminBox').innerHTML = `<div class="panel admin-panel">
+      <h2>Admin</h2>
+      <p class="muted">This is an admin account.</p>
+      <a class="big primary admin-link" href="admin.html">Dashboard</a>
+      <button class="big plain" id="toEn" type="button">영어 학습으로 전환 <small class="muted">(Korean screens)</small></button>
+    </div>`;
+    on('toEn', async () => {
+      $('toEn').disabled = true;
+      try { state.profile = await api.updateProfile(state.user.id, { learn_lang: 'en' }); boot(); }
+      catch (e) { $('toEn').disabled = false; }
+    });
+  }).catch(() => {});
   on('logout', async () => { await api.signOut(); state.user = null; state.profile = null; go('login'); });
   if (!p.code) api.myCode().then((c) => { p.code = c; if ($('myCode')) $('myCode').textContent = c; }).catch(() => {});
   $('nameForm').addEventListener('submit', async (e) => {
