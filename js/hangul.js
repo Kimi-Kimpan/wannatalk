@@ -7,7 +7,7 @@ const VCOMB = { 'ㅗㅏ': 'ㅘ', 'ㅗㅐ': 'ㅙ', 'ㅗㅣ': 'ㅚ', 'ㅜㅓ': '�
 const JCOMB = { 'ㄱㅅ': 'ㄳ', 'ㄴㅈ': 'ㄵ', 'ㄴㅎ': 'ㄶ', 'ㄹㄱ': 'ㄺ', 'ㄹㅁ': 'ㄻ', 'ㄹㅂ': 'ㄼ', 'ㄹㅅ': 'ㄽ', 'ㄹㅌ': 'ㄾ', 'ㄹㅍ': 'ㄿ', 'ㄹㅎ': 'ㅀ', 'ㅂㅅ': 'ㅄ' };
 const VSPLIT = Object.fromEntries(Object.entries(VCOMB).map(([k, v]) => [v, [...k]]));
 const JSPLIT = Object.fromEntries(Object.entries(JCOMB).map(([k, v]) => [v, [...k]]));
-const isVowel = (j) => JUNG.includes(j);
+export const isVowel = (j) => JUNG.includes(j);
 
 // 두벌식 자판: 한 줄씩, [영문 자리, 글자, Shift 글자]
 export const ROWS = [
@@ -104,26 +104,31 @@ export function sayable(j) {
   return compose([j, 'ㅏ']);
 }
 
-// 2주 과정: 하루 한 단원. letters = 새로 배우는 글자, syll = 조립 연습, words = [낱말, 뜻, 로마자]
+// 하루 한 단원. letters = 새로 배우는 글자, syll = 조립 연습, words = [낱말, 뜻, 로마자]
+// 쉬운 것부터: ㄱ ㄴ과 기본 모음 → 자음 더하기 → ㅇ(자리 지킴이) → 받침 → 된소리 → 겹모음 → 어려운 것(ㅢ ㅞ, 겹받침)
 export const UNITS = [
-  { title: 'Simple vowels', letters: ['ㅇ', 'ㅏ', 'ㅓ', 'ㅗ', 'ㅜ', 'ㅡ', 'ㅣ'], syll: ['아', '어', '오', '우', '이'],
-    words: [['아이', 'child', 'a-i'], ['오이', 'cucumber', 'o-i'], ['이', 'two', 'i'], ['아우', 'younger brother', 'a-u']] },
-  { title: 'ㄴ ㅁ ㄹ', letters: ['ㄴ', 'ㅁ', 'ㄹ'], syll: ['나', '머', '로', '누', '미'],
-    words: [['나무', 'tree', 'na-mu'], ['머리', 'head', 'meo-ri'], ['나라', 'country', 'na-ra'], ['어머니', 'mother', 'eo-meo-ni']] },
-  { title: 'ㄱ ㄷ ㅂ ㅅ ㅈ', letters: ['ㄱ', 'ㄷ', 'ㅂ', 'ㅅ', 'ㅈ'], syll: ['가', '도', '부', '서', '지'],
-    words: [['바다', 'sea', 'ba-da'], ['사자', 'lion', 'sa-ja'], ['지도', 'map', 'ji-do'], ['아버지', 'father', 'a-beo-ji']] },
-  { title: 'ㅎ ㅊ ㅋ ㅌ ㅍ', letters: ['ㅎ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ'], syll: ['하', '초', '커', '투', '피'],
-    words: [['하나', 'one', 'ha-na'], ['커피', 'coffee', 'keo-pi'], ['토마토', 'tomato', 'to-ma-to'], ['피자', 'pizza', 'pi-ja']] },
+  { title: 'First letters', letters: ['ㄱ', 'ㄴ', 'ㅏ', 'ㅓ', 'ㅗ', 'ㅜ', 'ㅣ'], syll: ['가', '너', '고', '누', '기'],
+    words: [['나', 'I, me', 'na'], ['너', 'you', 'neo'], ['누나', 'older sister', 'nu-na'], ['거기', 'there', 'geo-gi']] },
+  { title: 'ㄷ ㄹ ㅁ ㅡ', letters: ['ㄷ', 'ㄹ', 'ㅁ', 'ㅡ'], syll: ['다', '러', '모', '루', '므'],
+    words: [['나무', 'tree', 'na-mu'], ['머리', 'head', 'meo-ri'], ['다리', 'leg, bridge', 'da-ri'], ['나라', 'country', 'na-ra']] },
+  { title: 'ㅂ ㅅ ㅈ', letters: ['ㅂ', 'ㅅ', 'ㅈ'], syll: ['바', '서', '조', '수', '지'],
+    words: [['바다', 'sea', 'ba-da'], ['사자', 'lion', 'sa-ja'], ['지도', 'map', 'ji-do'], ['버스', 'bus', 'beo-seu']] },
+  { title: 'The silent ㅇ and ㅎ', letters: ['ㅇ', 'ㅎ'], note: 'ㅇ keeps the first place when a syllable starts with a vowel. It makes no sound there: 아 = a.', syll: ['아', '오', '이', '우', '하'],
+    words: [['아이', 'child', 'a-i'], ['오이', 'cucumber', 'o-i'], ['하나', 'one', 'ha-na'], ['어머니', 'mother', 'eo-meo-ni']] },
+  { title: 'ㅊ ㅋ ㅌ ㅍ', letters: ['ㅊ', 'ㅋ', 'ㅌ', 'ㅍ'], syll: ['차', '커', '토', '푸', '치'],
+    words: [['커피', 'coffee', 'keo-pi'], ['토마토', 'tomato', 'to-ma-to'], ['피자', 'pizza', 'pi-ja'], ['기차', 'train', 'gi-cha']] },
   { title: 'ㅑ ㅕ ㅛ ㅠ ㅐ ㅔ', letters: ['ㅑ', 'ㅕ', 'ㅛ', 'ㅠ', 'ㅐ', 'ㅔ'], syll: ['야', '여', '요', '유', '배'],
     words: [['우유', 'milk', 'u-yu'], ['여자', 'woman', 'yeo-ja'], ['요리', 'cooking', 'yo-ri'], ['네', 'yes', 'ne']] },
-  { title: 'Final sounds 1', letters: [], note: 'A consonant under a syllable is its final sound (받침).', syll: ['안', '강', '밤', '물', '국'],
+  { title: 'Final sounds 1', letters: [], note: 'A consonant can sit at the bottom of a syllable. It is the final sound. ㅇ at the bottom sounds “ng”.', syll: ['안', '강', '밤', '물', '국'],
     words: [['사랑', 'love', 'sa-rang'], ['한국', 'Korea', 'han-guk'], ['이름', 'name', 'i-reum'], ['물', 'water', 'mul']] },
-  { title: 'Final sounds 2', letters: [], note: 'ㅂ ㅅ ㅈ ㅊ at the end sound short: p, t, t, t.', syll: ['밥', '옷', '집', '맛', '낮'],
+  { title: 'Final sounds 2', letters: [], note: 'ㅂ ㅅ ㅈ ㅊ at the bottom sound short: p, t, t, t.', syll: ['밥', '옷', '집', '맛', '낮'],
     words: [['밥', 'rice, a meal', 'bap'], ['집', 'house', 'jip'], ['옷', 'clothes', 'ot'], ['맛', 'taste', 'mat']] },
   { title: 'Double consonants (Shift)', letters: ['ㄲ', 'ㄸ', 'ㅃ', 'ㅆ', 'ㅉ'], syll: ['까', '또', '빠', '씨', '짜'],
     words: [['아빠', 'dad', 'a-ppa'], ['꼬리', 'tail', 'kko-ri'], ['쓰다', 'to write', 'sseu-da'], ['짜다', 'salty', 'jja-da']] },
-  { title: 'Combined vowels', letters: ['ㅘ', 'ㅝ', 'ㅚ', 'ㅟ', 'ㅢ', 'ㅖ'], syll: ['와', '워', '외', '위', '의'],
-    words: [['사과', 'apple', 'sa-gwa'], ['회사', 'company', 'hoe-sa'], ['의사', 'doctor', 'ui-sa'], ['시계', 'clock', 'si-gye']] },
+  { title: 'Combined vowels', letters: ['ㅘ', 'ㅝ', 'ㅚ', 'ㅟ', 'ㅖ'], syll: ['와', '워', '외', '위', '계'],
+    words: [['사과', 'apple', 'sa-gwa'], ['회사', 'company', 'hoe-sa'], ['더워요', 'it is hot', 'deo-wo-yo'], ['시계', 'clock', 'si-gye']] },
+  { title: 'Tricky ones', letters: ['ㅢ', 'ㅙ', 'ㅞ'], note: 'Some syllables have two final consonants. Usually only one is read: 닭 = dak.', syll: ['의', '왜', '웨', '닭', '읽'],
+    words: [['의사', 'doctor', 'ui-sa'], ['왜', 'why', 'wae'], ['닭', 'chicken', 'dak'], ['없어요', 'there is none', 'eop-seo-yo']] },
   { title: 'Everyday words', letters: [], note: 'Now type whole words you will use in letters.', syll: ['안', '녕', '감', '좋', '해'],
     words: [['안녕하세요', 'hello', 'an-nyeong-ha-se-yo'], ['감사합니다', 'thank you', 'gam-sa-ham-ni-da'], ['좋아요', 'good, I like it', 'jo-a-yo'], ['사랑해요', 'I love you', 'sa-rang-hae-yo']] },
 ];

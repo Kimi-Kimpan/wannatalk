@@ -3,7 +3,9 @@
 import { state, register, go, mount, on, $, esc, ICON, topBar, celebrate } from './ui.js';
 import { speak } from './speech.js';
 import * as api from './api.js';
-import { ROWS, QWERTY, SHIFTED, BASE_OF, compose, keysFor, nextKey, parts, SOUND, sayable, UNITS } from './hangul.js';
+import { ROWS, QWERTY, SHIFTED, BASE_OF, compose, keysFor, nextKey, parts, SOUND, sayable, UNITS, isVowel } from './hangul.js';
+// 자음은 주황, 모음은 파랑 (키보드·글자 칩·조립 칸 모두 같은 색)
+const cv = (j) => (isVowel(j) ? 'v' : 'c');
 
 // 지금까지 마친 단원 수 (서버에 저장, 안 되면 이 기기에)
 export function keysDone() {
@@ -20,7 +22,7 @@ export const KEY_UNITS = UNITS;
 
 // 화면 키보드 (두벌식). 컴퓨터 자판으로 쳐도 같아요.
 function keyboardHtml() {
-  const key = ([k, a, b]) => `<button class="kb-key" type="button" data-k="${a}" ${b ? `data-s="${b}"` : ''} aria-label="${a}"><span class="kb-j">${a}</span><small>${k}</small></button>`;
+  const key = ([k, a, b]) => `<button class="kb-key kb-${cv(a)}" type="button" data-k="${a}" ${b ? `data-s="${b}"` : ''} aria-label="${a}"><span class="kb-j">${a}</span><small>${k}</small></button>`;
   return `<div class="kb" id="kb" lang="ko">
     <div class="kb-row">${ROWS[0].map(key).join('')}</div>
     <div class="kb-row r2">${ROWS[1].map(key).join('')}</div>
@@ -73,19 +75,43 @@ register('ko-keys', (arg) => {
 
   const quit = () => { if (window.__kbKeys) window.removeEventListener('keydown', window.__kbKeys); go('ko-home'); };
 
+  // 처음 배우는 사람에게: 한국어는 음절(블록)로 써요
+  function howTo() {
+    const tile = (j, area) => `<span class="sy-t sy-${cv(j)}" style="grid-area:${area}">${j}</span>`;
+    const ex = (word, cls, tiles) => `<div class="sy-ex"><div class="sy-block ${cls}">${tiles}</div><b lang="ko">${word}</b></div>`;
+    mount(`<section class="screen fit kk howto" lang="en">
+      ${topBar('Hangul · Before we start', 0, 'Exit')}
+      <h1>Korean is written in syllables</h1>
+      <ol class="sy-rules">
+        <li>Letters are grouped into blocks. One block = one syllable.</li>
+        <li>A block starts with a <b class="c-txt">consonant</b> and has a <b class="v-txt">vowel</b>.</li>
+        <li>Sometimes a second consonant sits at the bottom.</li>
+      </ol>
+      <div class="sy-examples" lang="ko">
+        ${ex('가', 'side', tile('ㄱ', 'a') + tile('ㅏ', 'b'))}
+        ${ex('고', 'stack', tile('ㄱ', 'a') + tile('ㅗ', 'b'))}
+        ${ex('간', 'side3', tile('ㄱ', 'a') + tile('ㅏ', 'b') + tile('ㄴ', 'c'))}
+        ${ex('곤', 'stack3', tile('ㄱ', 'a') + tile('ㅗ', 'b') + tile('ㄴ', 'c'))}
+      </div>
+      <p class="muted sy-tip">Tall vowels go on the right. Flat vowels go underneath. The keyboard puts consonants on the left and vowels on the right.</p>
+      <div class="nav bottom"><button class="next" id="go" type="button">Got it</button></div>
+    </section>`);
+    on('quit', quit);
+    on('go', () => intro());
+  }
+
   function intro() {
     mount(`<section class="screen fit kk" lang="en">
       ${topBar(`Hangul · Unit ${u + 1} of ${UNITS.length}`, 0, 'Exit')}
       <h1>${esc(U.title)}</h1>
       ${U.letters.length ? `<p class="lead">New letters today</p>
-        <div class="kk-letters" lang="ko">${U.letters.map((x) => `<button class="kk-chip" type="button" data-j="${x}"><b>${x}</b><small>${esc(SOUND[x][0])}</small></button>`).join('')}</div>` : ''}
+        <div class="kk-letters" lang="ko">${U.letters.map((x) => `<span class="kk-chip kk-${cv(x)}"><b>${x}</b><small lang="en">${esc(SOUND[x][0])}</small></span>`).join('')}</div>` : ''}
       ${U.note ? `<p class="lead">${esc(U.note)}</p>` : ''}
-      <p class="muted">${U.letters.length ? 'Tap a letter to hear it. ' : ''}You will build ${U.syll.length} syllables and type ${U.words.length} words.</p>
+      <p class="muted">You will meet each letter, build ${U.syll.length} syllables and type ${U.words.length} words.</p>
       <div class="nav bottom"><button class="next" id="go" type="button">Start</button></div>
     </section>`);
     on('quit', quit);
     on('go', () => next());
-    document.querySelectorAll('.kk-chip').forEach((b) => b.addEventListener('click', () => speak(sayable(b.dataset.j), { rate: 0.8 })));
   }
 
   function next() {
@@ -101,7 +127,7 @@ register('ko-keys', (arg) => {
     const showRoman = t.kind === 'word' && u < 5;
     const body = t.kind === 'meet'
       ? `<p class="label">New letter</p>
-         <div class="kk-big" lang="ko">${t.target}</div>
+         <div class="kk-big kk-${cv(t.target)}" lang="ko">${t.target}</div>
          <p class="kk-sound"><b>${esc(SOUND[t.target][0])}</b> · ${esc(SOUND[t.target][1])}</p>
          <p class="muted">${t.target.length && keysFor(t.target).length > 1 ? `Type ${keysFor(t.target).join(' then ')}.` : SHIFTED.has(t.target) ? `Press ⇧ Shift, then ${BASE_OF[t.target]}.` : `Find ${t.target} on the keyboard and press it.`}</p>`
       : t.kind === 'build'
@@ -145,7 +171,7 @@ register('ko-keys', (arg) => {
         const got = out.length === 1 && /[가-힣]/.test(out) ? ps : { cho: typed[0] || '', jung: '', jong: '' };
         const need = parts(t.target);
         $('slots').innerHTML = [['first', got.cho, true], ['middle', got.jung, true], ['final', got.jong, !!need.jong]]
-          .filter((x) => x[2]).map(([name, v]) => `<span class="kk-slot ${v ? 'filled' : ''}"><b>${esc(v || ' ')}</b><small lang="en">${name}</small></span>`).join('');
+          .filter((x) => x[2]).map(([name, v]) => `<span class="kk-slot ${name === 'middle' ? 'sv' : 'sc'} ${v ? 'filled' : ''}"><b>${esc(v || ' ')}</b><small lang="en">${name}</small></span>`).join('');
       }
       const nk = nextKey(typed, t.target);
       if (out === t.target) {
@@ -153,7 +179,7 @@ register('ko-keys', (arg) => {
         kb.glow(null);
         $('hint').innerHTML = '<span class="cheer">✓ Great!</span>';
         celebrate($('hint'));
-        speak(t.kind === 'meet' ? sayable(t.target) : t.target, { rate: 0.8 });
+        if (t.kind !== 'meet') speak(t.target, { rate: 0.8 });
         $('next').textContent = 'Next';
         $('next').classList.add('ready');
         if (t.kind === 'meet') setTimeout(() => { if ($('next') && tasks[i] === t) next(); }, 1400);
@@ -167,6 +193,7 @@ register('ko-keys', (arg) => {
       kb.glow(guide || nk === 'BACK' ? nk : null);
     }
     refresh();
+    if (t.kind === 'meet') setTimeout(() => { if ($('hear') && tasks[i] === t) speak(sayable(t.target), { rate: 0.8, button: $('hear') }); }, 300);
     if (t.kind === 'word') setTimeout(() => { if ($('hear') && tasks[i] === t) speak(t.target, { rate: 0.8, button: $('hear') }); }, 300);
   }
 
@@ -188,5 +215,5 @@ register('ko-keys', (arg) => {
     on('home', () => go('ko-home'));
   }
 
-  intro();
+  if (u === 0) howTo(); else intro();
 });

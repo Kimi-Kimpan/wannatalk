@@ -984,3 +984,44 @@ body.sheet-open { overflow: hidden; }
 .keys-card .unit-dot.done { background: color-mix(in srgb, var(--primary) 28%, transparent); color: var(--ink); border-color: var(--primary); }
 .keys-card .unit-dot.now { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
 .keys-card .unit-dot:disabled { opacity: .45; }
+
+/* 한글: 자음 = 주황, 모음 = 파랑 (소리 프로젝트와 같은 약속) */
+:root { --cons: #D9733A; --vow: #2F6DB5; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --cons: #F0975F; --vow: #6FA8EE; } }
+:root[data-theme="dark"] { --cons: #F0975F; --vow: #6FA8EE; }
+.kb-key.kb-c { background: color-mix(in srgb, var(--cons) 16%, var(--card)); border-color: color-mix(in srgb, var(--cons) 45%, var(--line)); }
+.kb-key.kb-v { background: color-mix(in srgb, var(--vow) 18%, var(--card)); border-color: color-mix(in srgb, var(--vow) 45%, var(--line)); }
+.kb-key.kb-c .kb-j { color: color-mix(in srgb, var(--cons) 55%, var(--ink)); }
+.kb-key.kb-v .kb-j { color: color-mix(in srgb, var(--vow) 55%, var(--ink)); }
+.kb-key.kb-c:active { background: color-mix(in srgb, var(--cons) 32%, var(--card)); }
+.kb-key.kb-v:active { background: color-mix(in srgb, var(--vow) 34%, var(--card)); }
+.kb-key.glow, .kb-key.glow .kb-j { background: var(--primary); color: var(--primary-ink); }
+.kb-key.kb-c.glow { background: var(--cons); border-color: var(--cons); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cons) 45%, transparent); }
+.kb-key.kb-v.glow { background: var(--vow); border-color: var(--vow); box-shadow: 0 0 0 3px color-mix(in srgb, var(--vow) 45%, transparent); }
+.kb-key.kb-c.glow .kb-j, .kb-key.kb-v.glow .kb-j, .kb-key.kb-c.glow small, .kb-key.kb-v.glow small { color: #fff; background: transparent; }
+.kk-chip.kk-c { border-color: var(--cons); background: color-mix(in srgb, var(--cons) 14%, var(--card)); }
+.kk-chip.kk-v { border-color: var(--vow); background: color-mix(in srgb, var(--vow) 16%, var(--card)); }
+.kk-chip.kk-c b, .kk-big.kk-c, .c-txt { color: var(--cons); }
+.kk-chip.kk-v b, .kk-big.kk-v, .v-txt { color: var(--vow); }
+.kk-slot.sc.filled { border-color: var(--cons); background: color-mix(in srgb, var(--cons) 14%, transparent); }
+.kk-slot.sv.filled { border-color: var(--vow); background: color-mix(in srgb, var(--vow) 16%, transparent); }
+.kk-slot.sc.filled b { color: var(--cons); }
+.kk-slot.sv.filled b { color: var(--vow); }
+/* 음절 설명 화면 */
+.howto h1 { font-size: 28px; line-height: 1.25; margin: 4px 0 6px; }
+.sy-rules { margin: 0 0 10px; padding-left: 26px; font-size: 19px; line-height: 1.4; }
+.sy-rules li { margin: 0 0 4px; }
+.sy-examples { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin: 4px 0 8px; }
+.sy-ex { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1 1 0; }
+.sy-ex > b { font-size: 30px; line-height: 1; }
+.sy-block { display: grid; gap: 4px; }
+.sy-block.side { grid-template-areas: "a b"; }
+.sy-block.stack { grid-template-areas: "a" "b"; }
+.sy-block.side3 { grid-template-areas: "a b" "c c"; }
+.sy-block.stack3 { grid-template-areas: "a" "b" "c"; }
+.sy-t { min-width: 42px; height: 42px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 800; color: #fff; }
+.sy-c { background: var(--cons); }
+.sy-v { background: var(--vow); }
+.sy-tip { font-size: 17px; margin: 0; }
+.screen.fit.tighter .sy-t { min-width: 30px; height: 30px; font-size: 19px; }
+.screen.fit.tighter .sy-rules { font-size: 17px; }
