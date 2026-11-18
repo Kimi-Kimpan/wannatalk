@@ -105,15 +105,18 @@ register('ko-keys', (arg) => {
   function intro() {
     mount(`<section class="screen fit kk" lang="en">
       ${topBar(`Hangul · Unit ${u + 1} of ${UNITS.length}`, 0, 'Exit')}
-      <h1>${esc(U.title)}</h1>
-      ${U.letters.length ? `<p class="lead">New letters today</p>
-        <div class="kk-letters" lang="ko">${U.letters.map((x) => `<span class="kk-chip kk-${cv(x)}"><b>${x}</b><small lang="en">${esc(SOUND[x][0])}</small></span>`).join('')}</div>` : ''}
-      ${U.note ? `<p class="lead">${esc(U.note)}</p>` : ''}
-      <p class="muted">You will meet each letter, build ${U.syll.length} syllables and type ${U.words.length} words.</p>
+      <div class="kk-intro">
+        ${U.letters.length ? `<p class="lead">New letters today</p>
+          <div class="kk-letters" lang="ko">${U.letters.map((x) => `<span class="kk-chip kk-${cv(x)}"><b>${x}</b><small lang="en">${esc(SOUND[x][0])}</small></span>`).join('')}</div>` : `<h1>${esc(U.title)}</h1>`}
+        ${U.note ? `<p class="lead">${esc(U.note)}</p>` : ''}
+        <p class="muted">${U.letters.length ? 'You will meet each letter, build' : 'You will build'} ${U.syll.length} syllables and type ${U.words.length} words.</p>
+        <button class="link-btn kk-howto" id="howto" type="button">How to write in Korean ›</button>
+      </div>
       <div class="nav bottom"><button class="next" id="go" type="button">Start</button></div>
     </section>`);
     on('quit', quit);
     on('go', () => next());
+    on('howto', () => howTo());
   }
 
   function next() {

@@ -1027,3 +1027,9 @@ body.sheet-open { overflow: hidden; }
 .screen.fit.tighter .sy-rules { font-size: 17px; }
 .kk-nav .hint-btn.on { background: color-mix(in srgb, var(--listen) 22%, var(--card)); border-color: var(--listen); color: var(--ink); }
 .kk-nav .hint-btn.on::before { content: "💡 "; }
+/* 단원 시작 화면: 가운데 정렬, 화면 가운데보다 조금 위 */
+.kk-intro { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding-bottom: 12vh; }
+.kk-intro .lead, .kk-intro .muted { margin: 4px 0; }
+.kk-intro .kk-letters { margin: 6px 0 10px; }
+.kk-howto { margin-top: 10px; font-size: 17px; }
+.screen.fit.tighter .kk-intro { padding-bottom: 4vh; }
