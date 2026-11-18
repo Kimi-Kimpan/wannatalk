@@ -618,7 +618,7 @@ function wordsStep(S) {
              <button class="listen" id="play" type="button">${ICON.sound} 다시 듣기</button>
              ${canListen ? `<button class="mic plain" id="mic" type="button" hidden>${ICON.mic} 따라 말하기</button>` : ''}
            </div>`}
-      <div class="choices">${st.opts.map((o, j) => `<button class="choice" type="button" data-j="${j}"><span class="emoji" aria-hidden="true">${part === 'listen' ? esc(o.emoji || '') : ''}</span>${esc(o.ko)}</button>`).join('')}</div>
+      <div class="choices">${st.opts.map((o, j) => `<button class="choice" type="button" data-j="${j}"><span class="emoji" aria-hidden="true">${esc(o.emoji || '')}</span>${esc(o.ko)}</button>`).join('')}</div>
       <div class="nav">
         <button class="prev" id="qprev" type="button" ${part === 'read' && qi === 0 ? 'disabled' : ''}>이전</button>
         <button class="next" id="qnext" type="button" ${st.picked == null ? 'disabled' : ''}>${lastOfAll ? '다 했어요' : '다음'}</button>
@@ -631,7 +631,7 @@ function wordsStep(S) {
       buttons.forEach((x) => {
         x.disabled = true;
         const o = st.opts[Number(x.dataset.j)];
-        if (o.en === q.en) { x.classList.add('right'); x.querySelector('.emoji').textContent = o.emoji || ''; }
+        if (o.en === q.en) x.classList.add('right');
         else if (Number(x.dataset.j) === st.picked) x.classList.add('wrong');
       });
       if ($('mic')) { $('mic').hidden = false; $('mic').classList.remove('later'); }
@@ -719,7 +719,7 @@ function qaStep(S) {
       <div id="area">
         <p class="pick-tip" id="pickTip">${canListen ? (q.ask ? '아래 예시를 고르거나, 직접 물어보세요' : '아래 예시를 고르거나, 직접 말해주세요') : '아래 예시를 골라 주세요'}</p>
         <div class="sugg-list" id="qaChoices"></div>
-        <p class="hint say-tip" id="hint" aria-live="polite">클라우디아가 ${q.pre || q.ask ? '말하고' : '묻고'} 있어요…</p>
+        <p class="hint say-tip" id="hint" aria-live="polite"></p>
         ${canListen ? `<button class="mic" id="mic" type="button">${ICON.mic} ${q.ask ? '눌러서 물어보기' : '눌러서 대답하기'}</button>` : ''}
         ${canListen ? '' : `<form id="typed" class="typed"><input id="typedIn" type="text" autocomplete="off" placeholder="영어로 적어도 돼요" aria-label="영어로 적기"><button class="primary" type="submit">보내기</button></form>`}
       </div>

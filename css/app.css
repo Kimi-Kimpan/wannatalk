@@ -917,3 +917,11 @@ body.sheet-open { overflow: hidden; }
 .sum-edit-row .primary { flex: 1.2; margin-top: 0 !important; min-height: 46px; }
 .sum-part.editing { border-color: var(--primary); }
 .screen.fit .say-tip { max-width: 100%; }
+/* 묻고 답하기: 진행 막대와 클라우디아 말풍선 사이 한 줄, 다시 듣기는 말풍선에서 살짝 떨어지게 */
+.screen.fit.qa .emma-row { margin-top: 18px; }
+.screen.fit.qa .again { margin-top: 6px !important; }
+.screen.fit.tighter.qa .emma-row { margin-top: 8px; }
+/* 안내가 없는 동안(클라우디아가 말하는 중)에는 자리만 지켜요 */
+.screen.fit.qa .say-tip:empty { display: flex; visibility: hidden; }
+/* 그림이 없는 낱말은 빈 자리를 남기지 않아요 */
+.choice .emoji:empty { flex-basis: 0; width: 0; margin-right: -14px; }
