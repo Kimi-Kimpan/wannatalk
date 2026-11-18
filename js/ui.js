@@ -268,7 +268,7 @@ export function celebrate(el) {
 
 // 예시 카드: 한 장씩 보여 주고 양옆 화살표(또는 손가락으로 밀기)로 넘겨요.
 // items: [{en, ko}] · action: 아래 버튼 글자 · onPick(item): 버튼을 눌렀을 때 · onListen(item): 카드를 눌렀을 때
-export function carousel(box, items, { action = '이 문장으로 대답하기', onPick, onListen, start = 0, soft = false } = {}) {
+export function carousel(box, items, { action = '이 문장으로 대답하기', onPick, onListen, start = 0, soft = false, en = false } = {}) {
   const list = (items || []).filter((x) => x && x.en);
   let i = Math.max(0, Math.min(start, list.length - 1));
   const CL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -278,16 +278,17 @@ export function carousel(box, items, { action = '이 문장으로 대답하기',
     const x = list[i];
     if (!x) { box.innerHTML = ''; return; }
     box.innerHTML = `<div class="sugg-row">
-        <button class="sugg-arrow" data-go="-1" type="button" aria-label="이전 예시" ${i === 0 ? 'disabled' : ''}>${CL}</button>
+        <button class="sugg-arrow" data-go="-1" type="button" aria-label="${en ? 'Previous example' : '이전 예시'}" ${i === 0 ? 'disabled' : ''}>${CL}</button>
         <div class="sugg-card">
           <button class="sugg-main" type="button">
-            <span class="en" lang="en">${esc(x.en)}</span>
+            ${x.tag ? `<span class="sugg-tag">${esc(x.tag)}</span>` : ''}
+            <span class="en" lang="${en ? 'ko' : 'en'}">${esc(x.en)}</span>
             ${x.ko ? `<small>${esc(x.ko)}</small>` : ''}
-            <span class="sugg-listen">${ICON.sound} 들어 보기</span>
+            <span class="sugg-listen">${ICON.sound} ${en ? 'Listen' : '들어 보기'}</span>
           </button>
           <button class="sugg-send ${soft ? 'soft' : ''}" type="button">${esc(action)}</button>
         </div>
-        <button class="sugg-arrow" data-go="1" type="button" aria-label="다음 예시" ${i >= list.length - 1 ? 'disabled' : ''}>${CR}</button>
+        <button class="sugg-arrow" data-go="1" type="button" aria-label="${en ? 'Next example' : '다음 예시'}" ${i >= list.length - 1 ? 'disabled' : ''}>${CR}</button>
       </div>
       ${list.length > 1 ? `<div class="slide-dots sugg-dots">${list.map((_, k) => `<span class="${k === i ? 'on' : ''}"></span>`).join('')}<small>${i + 1} / ${list.length}</small></div>` : ''}`;
     box.querySelector('.sugg-main').addEventListener('click', () => { if (onListen) onListen(x, i); });

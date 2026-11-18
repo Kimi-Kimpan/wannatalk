@@ -89,7 +89,7 @@ function markButton(btn, on) {
     if (btn.dataset.busy === '1') return;
     btn.dataset.busy = '1';
     btn.dataset.label = btn.innerHTML;
-    btn.innerHTML = `${STOP_ICON} 멈추기`;
+    btn.innerHTML = `${STOP_ICON} ${btn.closest('[lang="en"]') ? 'Stop' : '멈추기'}`;
     btn.classList.add('playing');
   } else {
     if (btn.dataset.busy !== '1') return;

@@ -1047,3 +1047,9 @@ body.sheet-open { overflow: hidden; }
 .lesson-card h2 { margin: 2px 0 4px; }
 .ko-levels button { flex: 1; }
 .ko-lesson .say::before { content: "Say  "; font-size: 15px; }
+/* 한국어 레슨: 예시 카드에도 듣기 버튼이 보이게 */
+.screen.fit.tight.ko-lesson .sugg-listen, .ko-lesson .sugg-listen { display: inline-flex; margin-top: 6px; padding: 4px 10px; border: 1.5px solid var(--line); border-radius: 999px; color: var(--ink); }
+.sugg-tag { display: inline-block; font-size: 13px; font-weight: 800; color: var(--good, #4CC38A); margin-bottom: 2px; }
+.ko-lesson .sugg-listen { align-self: flex-start; }
+.screen.fit.tighter.ko-lesson .sugg-listen { margin-top: 3px; padding: 2px 8px; font-size: 14px; }
+.screen.fit.tighter.ko-lesson .typed input, .screen.fit.tighter.ko-lesson .typed button { min-height: 44px; padding-top: 6px; padding-bottom: 6px; }

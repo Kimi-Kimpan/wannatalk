@@ -833,13 +833,14 @@ ${KO_LEVELS[level]}
 ${last ? "This is the LAST question of today's lesson." : ""}
 Return JSON:
 {
-  "good": true or false,        // true if a Korean listener would understand the meaning, even with small mistakes. If the answer is in English, good is false.
+  "english": true or false,     // true if the learner answered mostly in English (that is fine: they are asking how to say it)
+  "good": true or false,        // true if the meaning answers the question and, in Korean, a listener would understand it even with small mistakes. An English answer that answers the question is good.
   "reply_ko": "Klaudia's short warm reaction in Korean at the learner's level (max 8 words)${last ? ", then a short goodbye" : ""}. No question.",
   "reply_en": "English meaning of reply_ko",
-  "better_ko": "a natural, correct Korean version of what the learner meant, at their level (keep their own words where they are right)",
+  "better_ko": "a natural, correct Korean version of what the learner meant, at their level (keep their own words where they are right). If they answered in English, this is how to say THEIR answer in simple Korean (e.g. 'I'm a doctor' -> '저는 의사예요.')",
   "better_en": "English meaning",
   "better_roman": "Revised Romanization of better_ko",
-  "tip_en": "one short English tip about a particle, ending or word, or empty string",
+  "tip_en": "one short English tip about a particle, ending or word (for an English answer: the key new Korean word and its meaning, e.g. '의사 = doctor'), or empty string",
   "facts": ["short English facts about the learner's life learned from this answer. Empty if none."]
 }`;
   return await gemini(system, prompt, 0.4, 1500, m);

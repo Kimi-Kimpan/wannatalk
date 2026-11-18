@@ -280,24 +280,30 @@ function qaStep(S) {
       </div>
       <button class="ghost again" id="again" type="button">${ICON.sound} Listen again</button>
       <div id="area">
-        <p class="pick-tip">Pick an example, or answer in your own words</p>
+        <p class="pick-tip">${q.extra ? 'Listen, then tap Answer and say it' : 'Pick an example, or answer in your own words'}</p>
         <div class="sugg-list" id="qaChoices"></div>
         <p class="hint say-tip" id="hint" aria-live="polite"></p>
-        ${canListen ? `<button class="mic" id="mic" type="button">${ICON.mic} Answer in Korean</button>` : ''}
+        ${canListen ? `<button class="mic" id="mic" type="button">${ICON.mic} Answer</button>` : ''}
         <form id="typed" class="typed"><input id="typedIn" type="text" lang="ko" autocomplete="off" placeholder="Or type in Korean" aria-label="Type your answer in Korean"><button class="primary" type="submit">Send</button></form>
       </div>
     </section>`);
     bindQuit(S);
-    const play = () => say(`${pre ? `${pre.ko} ` : ''}${q.ko}`, S, 'again');
+    const play = async () => {
+      await say(`${pre ? `${pre.ko} ` : ''}${q.ko}`, S, 'again');
+      if ($('hint') && !$('hint').textContent) $('hint').textContent = q.extra ? 'Say it out loud!' : 'Answer in English or Korean!';
+    };
     on('again', play);
-    setTimeout(() => { if ($('again')) play(); }, 350);
-    carousel($('qaChoices'), q.choices.map((c) => ({ en: c.ko, ko: c.en })), {
-      action: 'Use this answer', soft: true,
+    if (q.extra) $('hint').textContent = 'Say it out loud!';
+    else setTimeout(() => { if ($('again')) play(); }, 350);
+    // 다시 하기: 클라우디아가 고쳐 준 문장(영어로 답했을 때는 한국어로 바꾼 문장)이 맨 앞에 골라져 있어요
+    const list = q.extra ? [q.extra, ...q.choices.filter((c) => c.ko !== q.extra.ko)] : q.choices;
+    carousel($('qaChoices'), list.map((c) => ({ en: c.ko, ko: c.roman ? `${c.roman} · ${c.en}` : c.en, tag: c === q.extra ? 'Klaudia’s version' : '' })), {
+      action: 'Use this answer', soft: true, en: true,
       onListen: (c) => speak(c.en, { rate: S.rate }),
       onPick: (c) => answered(q, c.en, true),
     });
     on('mic', async () => {
-      const alts = await hear($('mic'), $('hint'), { lang: 'ko', ui: 'en', listening: 'Listening… answer in Korean' });
+      const alts = await hear($('mic'), $('hint'), { lang: 'auto', ui: 'en', listening: 'Listening… answer in English or Korean' });
       if (alts && alts[0] && $('area')) answered(q, alts[0], false);
     });
     $('typed').addEventListener('submit', (e) => {
@@ -313,7 +319,7 @@ function qaStep(S) {
     $('area').innerHTML = `<div class="feedback"><p class="label">You said</p><p class="en" lang="ko">${esc(text)}</p><p class="muted">Klaudia is listening…</p></div>`;
     let r = null;
     if (tapped) {
-      const c = q.choices.find((x) => x.ko === text) || { en: '' };
+      const c = [q.extra, ...q.choices].find((x) => x && x.ko === text) || { en: '' };
       r = { good: true, better_ko: text, better_en: c.en, tip_en: '', reply_ko: '좋아요!', reply_en: 'Great!' };
       api.ai('kocheck', { question: q.ko, answer: text, tapped: true, level: S.level, last }).then((x) => { if (x && x.facts && x.facts.length) api.addNotes(x.facts, S.pack.topic).catch(() => {}); }).catch(() => {});
     } else {
@@ -331,7 +337,7 @@ function qaStep(S) {
     const same = r && r.better_ko && r.better_ko.replace(/[\s.!?]/g, '') === text.replace(/[\s.!?]/g, '');
     $('area').innerHTML = `<div class="feedback">
         <p class="label">You said</p><p class="en" lang="ko">${esc(text)}</p>
-        ${r && r.better_ko && !same ? `<p class="label">Klaudia’s version</p><p class="en better" lang="ko">${esc(r.better_ko)}</p>
+        ${r && r.better_ko && !same ? `<p class="label">${r.english ? 'In Korean you can say' : 'Klaudia’s version'}</p><p class="en better" lang="ko">${esc(r.better_ko)}</p>
           ${r.better_roman ? `<p class="say">${esc(r.better_roman)}</p>` : ''}` : ''}
         ${r && r.better_en ? `<p class="muted">${esc(r.better_en)}</p>` : ''}
         ${r && r.tip_en ? `<p class="tip">💡 ${esc(r.tip_en)}</p>` : ''}
@@ -342,11 +348,17 @@ function qaStep(S) {
         <button class="prev" id="retry" type="button">Try again</button>
         <button class="next" id="qaNext" type="button">${last ? 'Done' : 'Next'}</button>
       </div>`;
-    if (r && r.good !== false && tapped !== true) celebrate($('area').querySelector('.feedback'));
+    if (r && r.good !== false && !r.english && tapped !== true) celebrate($('area').querySelector('.feedback'));
     on('hearBetter', () => say(r.better_ko, S, 'hearBetter'));
-    on('retry', () => { S.score.qa[1]--; if (!r || r.good !== false) S.score.qa[0]--; ask(); });
+    on('retry', () => {
+      S.score.qa[1]--; if (!r || r.good !== false) S.score.qa[0]--;
+      // 클라우디아의 문장으로 한 번 더: 예시 맨 앞에 골라 두고 읽으면서 말해 봐요
+      if (r && r.better_ko) q.extra = { ko: r.better_ko, en: r.better_en || '', roman: r.better_roman || '' };
+      ask();
+    });
     on('qaNext', () => {
       pre = r && r.reply_ko ? { ko: r.reply_ko, en: r.reply_en || '' } : null;
+      delete q.extra;
       k++;
       if (k < qs.length) ask();
       else nextStep(S);
