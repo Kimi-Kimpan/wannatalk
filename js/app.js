@@ -4,6 +4,7 @@ import { configured, sb } from './api.js';
 import { boot } from './screens.js';
 import './placement.js';
 import './about.js';
+import './korean.js';
 import './learn.js';
 import './friend.js';
 import './message.js';

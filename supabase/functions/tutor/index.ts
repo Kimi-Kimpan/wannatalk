@@ -511,7 +511,7 @@ async function openaiSpeech(text: string, level: number): Promise<{ audio: strin
   const voice = Deno.env.get("OPENAI_TTS_VOICE") || "coral";
   for (const model of (Deno.env.get("OPENAI_TTS_MODELS") || OPENAI_TTS.join(",")).split(",").map((m) => m.trim()).filter(Boolean)) {
     const body: Record<string, unknown> = { model, voice, input: text, response_format: "mp3" };
-    if (!model.startsWith("tts-")) body.instructions = PACE[level] || PACE[2];
+    if (!model.startsWith("tts-")) body.instructions = (PACE[level] || PACE[2]) + (/[\uAC00-\uD7A3]/.test(text) ? " The text is Korean: read it in natural, standard Seoul Korean." : "");
     try {
       const t0 = Date.now();
       const res = await timed("https://api.openai.com/v1/audio/speech", {
@@ -658,7 +658,57 @@ const STEP_TEXT: Record<string, string> = {
   body: "the main sentence: what the writer wants to say or ask",
   close: "a short friendly closing line (e.g. 'Talk soon!', 'Take care.')",
 };
+// 편지 번역: 받는 사람이 배우는 언어로 (원문의 뜻과 말투를 그대로, 쉬운 말로)
+async function translateLetter(b: any, m?: Meter) {
+  const to = b.to === "ko" ? "ko" : "en";
+  const system = "You translate short personal messages between family members. Reply with JSON only.";
+  const prompt = `Translate this message into ${to === "ko" ? "natural, simple Korean (polite 해요체)" : "natural, simple English"} for a beginner learner of that language.
+Keep the meaning, names and warmth exactly; do not add or remove anything; keep it as short as the original.
+Message: """${clip(b.text, 2000)}"""
+Return JSON: {"text": "..."}`;
+  return await gemini(system, prompt, 0.2, 1200, m);
+}
+
+// 한국어를 배우는 사람이 한국어로 편지를 쓸 때 (화면은 영어, "en" 칸에 한국어 문장, "ko" 칸에 영어 뜻)
+async function composeKorean(b: any, m?: Meter) {
+  const level = levelOf(b.level);
+  const topic = COMPOSE_TOPICS[b.topic] ? b.topic : "free";
+  const who = `Writer: ${clip(b.from_name, 40) || "the writer"}. Reader: ${clip(b.to_name, 40) || "the reader"}.`;
+  const draft = Array.isArray(b.draft) ? b.draft.slice(0, 5).map((x: unknown) => clip(x, 200)).join(" ") : "";
+  const replyTo = b.reply_to ? `\nThe message being replied to: """${clip(b.reply_to, 800)}"""` : "";
+  const system = `You are Klaudia, helping an English speaker who is a BEGINNER learner of Korean write a very short, warm message in KOREAN to a Korean family member. ${learnerOf(b)}
+Every Korean line is short (max 8 words), uses everyday words and the polite 해요체 ending. Reply with JSON only.
+In every item, the key "en" holds the KOREAN sentence and the key "ko" holds its natural ENGLISH meaning.`;
+  if (b.mode === "voice") {
+    const step = STEP_TEXT[b.step] ? b.step : "body";
+    const prompt = `${who}
+Topic: ${COMPOSE_TOPICS[topic]}${replyTo}
+Message so far: "${draft}"
+Now writing: ${STEP_TEXT[step]}
+The writer said (speech recognition, may be English or Korean, may have errors): "${clip(b.said, 400)}"
+
+If they said it in Korean: keep THEIR OWN words and word order as much as possible and fix only real mistakes (grammar, particles, spelling, ending). Do not rephrase what is already correct.
+If they said it in English: turn it into ONE short, simple Korean sentence (해요체).
+Return JSON: {"en": "the Korean sentence", "ko": "its English meaning"}`;
+    return await gemini(system, prompt, 0.3, 400, m);
+  }
+  const prompt = `${who}
+Topic: ${COMPOSE_TOPICS[topic]}${replyTo}
+
+Suggest lines for each part of the message. Each line is ONE short Korean sentence, written as the writer, using the reader's name naturally (e.g. '용호 님').
+Return JSON:
+{
+  "greet": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ],
+  "body":  [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ],
+  "close": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]${b.reply_to ? `,
+  "points": [ {"ko": "one thing in their message worth answering, as ONE short English sentence that starts with the sender's name (e.g. 'Yongho said he worked at the airport today.')", "body": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]} ]   // 1 to 4 points, each with 3 different short Korean answers` : ""}
+}
+The three options in each part should be clearly different.`;
+  return await gemini(system, prompt, 0.7, b.reply_to ? 2400 : 1200, m);
+}
+
 async function compose(b: any, m?: Meter) {
+  if (b.write_lang === "ko") return await composeKorean(b, m);
   const writerLearner = b.writer_role !== "friend";
   const level = levelOf(writerLearner ? b.level : b.reader_level);
   const topic = COMPOSE_TOPICS[b.topic] ? b.topic : "free";
@@ -678,7 +728,8 @@ Message so far: "${draft}"
 Now writing: ${STEP_TEXT[step]}
 The writer said (speech recognition, may be Korean or English, may have errors): "${clip(b.said, 400)}"
 
-Turn what the writer meant into ONE natural English sentence for this part of the message, keeping their meaning and voice.
+If they said it in English: keep THEIR OWN words and word order as much as possible and fix only real mistakes (grammar, tense, spelling). Do not rephrase what is already correct.
+If they said it in Korean: turn it into ONE short, natural English sentence that keeps their meaning and voice.
 Return JSON: {"en": "...", "ko": "natural Korean meaning (polite)"}`;
     return await gemini(system, prompt, 0.4, 400, m);
   }
@@ -824,7 +875,7 @@ Deno.serve(async (req) => {
   if (gone) return json({ error: "unauthorized" }, 401);
   const meter: Meter = [];
   const handlers: Record<string, (b: any, m: Meter) => Promise<any>> = {
-    pack: makePack, check: checkAnswer, chat: chatTurn, letter: readLetter, polish: polishReply,
+    pack: makePack, check: checkAnswer, chat: chatTurn, letter: readLetter, polish: polishReply, translate: translateLetter,
     tts: speech, stt: transcribe, compose,
   };
   try {

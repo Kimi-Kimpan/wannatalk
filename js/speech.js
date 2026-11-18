@@ -115,8 +115,9 @@ function deviceSpeak(text, { rate = 0.85 } = {}) {
     try {
       synth.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'en-US';
-      if (voice) u.voice = voice;
+      const korean = /[\uAC00-\uD7A3]/.test(text);   // 한국어 문장은 한국어 목소리로
+      u.lang = korean ? 'ko-KR' : 'en-US';
+      if (voice && !korean) u.voice = voice;
       u.rate = rate;
       u.pitch = 1;
       let done = false;

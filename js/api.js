@@ -275,9 +275,32 @@ export async function markAllFrom(uid, fromId) {
 export async function markLetter(id) {
   await sb.from('letters').update({ handled_at: new Date().toISOString() }).eq('id', id);
 }
-export async function sendLetter({ family = null, to_id, body, reply_to = null }) {
-  const { error } = await sb.from('letters').insert({ family, to_id, body, reply_to });
+export async function sendLetter({ family = null, to_id, body, reply_to = null, translateTo = null }) {
+  const { data, error } = await sb.from('letters').insert({ family, to_id, body, reply_to }).select('id').single();
   if (error) throw error;
+  // 받는 사람이 다른 언어를 배우면 그 언어 번역을 미리 만들어 둬요 (실패해도 받는 쪽에서 다시 만들어요)
+  if (data && translateTo && translateTo !== letterLang(body)) {
+    ai('translate', { text: body, to: translateTo })
+      .then((r) => r && r.text && sb.rpc('set_letter_translation', { lid: data.id, lang: translateTo, txt: r.text }))
+      .catch(() => {});
+  }
+}
+
+// 편지 번역 ----------------------------------------------------------------------------
+// 편지가 쓰인 언어 (한글이 있으면 한국어)
+export function letterLang(text) { return /[\uAC00-\uD7A3]/.test(String(text || '')) ? 'ko' : 'en'; }
+// 내가 받은 편지 중 내가 배우는 언어가 아닌 것은 번역을 만들어 저장해요 (한 번만)
+export async function ensureTranslations(letters, uid, learn) {
+  const need = (letters || []).filter((l) => l && l.to_id === uid && letterLang(l.body) !== learn && !(l.translation && l.translation_lang === learn));
+  await Promise.all(need.slice(0, 6).map(async (l) => {
+    try {
+      const r = await ai('translate', { text: l.body, to: learn });
+      if (!r || !r.text) return;
+      l.translation = r.text; l.translation_lang = learn;
+      await sb.rpc('set_letter_translation', { lid: l.id, lang: learn, txt: r.text });
+    } catch (e) { /* 원문으로 보여요 */ }
+  }));
+  return letters;
 }
 
 // 연락처 (코드로 추가) ---------------------------------------------------------------

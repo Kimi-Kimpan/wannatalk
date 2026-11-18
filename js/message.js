@@ -74,10 +74,24 @@ const T = {
     planFail: 'Could not get suggestions. Tap the mic and say it; Klaudia will write it in English.',
   },
 };
+// 한국어를 배우는 사람: 화면은 영어, 편지는 한국어로
+T.enk = {
+  ...T.en,
+  say: {
+    greet: "Let's start with a greeting in Korean.<br>Pick one below, or tap the mic and say it. <b>You can say it in English; Klaudia will put it into Korean.</b>",
+    body: 'Now say what you want to tell them, in one short sentence.',
+    close: 'Finally, a short goodbye in Korean.',
+  },
+  converting: 'Putting it into Korean…',
+  converted: 'Klaudia kept your words and fixed only the mistakes. Compare and choose.',
+  planFail: 'Could not get suggestions. Tap the mic and say it; Klaudia will write it in Korean.',
+  replyHint: (ps) => ps.length ? `<b>You could answer:</b><br>${ps.slice(0, 2).map((x) => '· ' + esc(x)).join('<br>')}` : '<b>Answer their message in one short Korean sentence.</b>',
+};
+const tt = () => (writesKorean() ? T.enk : T[lang()]);
 const STEPS = ['greet', 'body', 'close'];
 
 // 낱말 비교: 내가 한 말에서 빠지거나 바뀐 낱말은 줄을 긋고, 클라우디아 문장에서 새로 들어간 낱말은 색을 칠합니다.
-const norm = (w) => w.toLowerCase().replace(/[’`]/g, "'").replace(/[^a-z0-9']/g, '');
+const norm = (w) => w.toLowerCase().replace(/[’`]/g, "'").replace(/[^a-z0-9'\uAC00-\uD7A3]/g, '');
 export function wordDiff(a, b) {
   const A = String(a || '').split(/\s+/).filter(Boolean), B = String(b || '').split(/\s+/).filter(Boolean);
   const n = A.length, m = B.length;
@@ -95,11 +109,47 @@ export function wordDiff(a, b) {
 }
 export const hasHangul = (x) => /[\u3131-\uD79D]/.test(String(x || ''));
 
+// 받은 편지: 내가 배우는 언어 번역이 먼저, 스위치를 누르면 상대가 쓴 원문 ---------------------
+const learnLang = () => (state.profile && state.profile.learn_lang) || 'en';
+function translated(l) {
+  const me = state.user && state.user.id;
+  const learn = learnLang();
+  return l && l.to_id === me && l.translation && l.translation_lang === learn && api.letterLang(l.body) !== learn;
+}
+// 먼저 보여 줄 글 (읽어 줄 때도 이 글을 읽어요)
+export function readable(l) { return translated(l) ? l.translation : (l && l.body) || ''; }
+export function letterBody(l, cls = '') {
+  if (!translated(l)) return `<p class="${cls}" lang="${api.letterLang(l.body)}">${esc(l.body)}</p>`;
+  const learn = learnLang();
+  const L = learn === 'ko' ? { a: 'Show original', b: 'Show Korean' } : { a: '원문 보기', b: '영어로 보기' };
+  return `<div class="tr-wrap">
+    <p class="${cls} tr-first" lang="${learn}">${esc(l.translation)}</p>
+    <p class="${cls} tr-orig" lang="${api.letterLang(l.body)}" hidden>${esc(l.body)}</p>
+    <button class="tr-toggle" type="button" data-a="${L.a}" data-b="${L.b}" aria-pressed="false">⇄ ${L.a}</button>
+  </div>`;
+}
+export function bindLetterToggles(root = document) {
+  root.querySelectorAll('.tr-toggle').forEach((b) => {
+    if (b.dataset.bound) return;
+    b.dataset.bound = '1';
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const w = b.closest('.tr-wrap');
+      const orig = w.querySelector('.tr-orig'), first = w.querySelector('.tr-first');
+      const showOrig = orig.hidden;
+      orig.hidden = !showOrig; first.hidden = showOrig;
+      b.textContent = `⇄ ${showOrig ? b.dataset.b : b.dataset.a}`;
+      b.setAttribute('aria-pressed', String(showOrig));
+    });
+  });
+}
+
 let origin = null; // 설정에서 열었으면 돌아갈 때 설정으로
 register('message', (opts) => { origin = (opts && opts.from) || null; start(opts || {}); });
 
-function lang() { return state.profile && state.profile.role === 'friend' ? 'en' : 'ko'; }
-function home() { go(state.profile && state.profile.role === 'friend' ? 'friend' : 'home'); }
+function lang() { return state.profile && (state.profile.role === 'friend' || state.profile.learn_lang === 'ko') ? 'en' : 'ko'; }
+const writesKorean = () => !!(state.profile && state.profile.learn_lang === 'ko');
+function home() { go(state.profile && state.profile.role === 'friend' ? 'friend' : writesKorean() ? 'ko-home' : 'home'); }
 
 async function start({ to = null, topic = null, replyTo = null } = {}) {
   if (!to) return pickRecipient();
@@ -109,11 +159,12 @@ async function start({ to = null, topic = null, replyTo = null } = {}) {
 
 // 1. 편지함: 보낼 사람 고르기 + 주고받은 메시지 -------------------------------------------------
 async function pickRecipient(msg = '') {
-  const t = T[lang()];
+  const t = tt();
   loading('…');
   let contacts = [], letters = [], code = state.profile.code || '';
   try {
     [contacts, letters, code] = await Promise.all([api.myContacts(), api.myLetters(state.user.id, 40), code || api.myCode()]);
+    await api.ensureTranslations(letters, state.user.id, learnLang());
   } catch (e) { /* 보이는 만큼 */ }
   if (code && state.profile) state.profile.code = code;
   const byId = Object.fromEntries(contacts.map((c) => [c.id, c]));
@@ -133,7 +184,7 @@ async function pickRecipient(msg = '') {
     const i = allLetters.indexOf(l);
     return `<div class="chat ${mine ? 'me' : 'them'}">
       <div class="chat-meta">${mine ? t.me : esc((byId[l.from_id] && byId[l.from_id].name) || '?')} · ${fmt(l.created_at)}</div>
-      <div class="chat-body" lang="en">${esc(l.body)}</div>
+      <div class="chat-body">${letterBody(l)}</div>
       <button class="ghost hear-btn" type="button" data-i="${i}">${ICON.sound} ${t.listen}</button>
     </div>`;
   }
@@ -163,7 +214,7 @@ async function pickRecipient(msg = '') {
       return `<button class="conv-row" type="button" data-t="${ti}">
         <span class="conv-face" aria-hidden="true">${esc(String(th.name).trim().charAt(0).toUpperCase() || '?')}</span>
         <span class="conv-main"><b>${esc(th.name)}</b>
-          <span class="conv-last ${fresh ? 'fresh' : ''}" ${last ? 'lang="en"' : ''}>${last ? (last.from_id === me ? `${t.me}: ` : '') + esc(last.body) : esc(t.noLetters)}</span></span>
+          <span class="conv-last ${fresh ? 'fresh' : ''}" ${last ? 'lang="en"' : ''}>${last ? (last.from_id === me ? `${t.me}: ` : '') + esc(readable(last)) : esc(t.noLetters)}</span></span>
         <span class="conv-side">${last ? `<span class="conv-date">${day(last.created_at)}</span>` : ''}${fresh ? `<span class="count-pill">${t.newMark}</span>` : ''}</span>
       </button>`;
     }).join('')}</div>
@@ -187,8 +238,9 @@ async function pickRecipient(msg = '') {
       ${th.contact ? `<button class="big primary" id="threadGo" type="button">✉️ ${canReply ? t.reply : esc(t.sendTo(th.name))}</button>` : ''}
     </section>`);
     on('quit', () => pickRecipient());
-    document.querySelectorAll('.hear-btn').forEach((b) => b.addEventListener('click', () => speak(letters[Number(b.dataset.i)].body, { rate: 0.85, button: b })));
+    document.querySelectorAll('.hear-btn').forEach((b) => b.addEventListener('click', () => speak(readable(letters[Number(b.dataset.i)]), { rate: 0.85, button: b })));
     on('threadGo', () => (canReply ? writeMessage(th.contact, 'reply', last) : pickTopic(th.contact)));
+    bindLetterToggles($('chatList'));
     const list = $('chatList');
     list.scrollTop = list.scrollHeight;
   }
@@ -210,7 +262,7 @@ async function pickRecipient(msg = '') {
 
 // 2. 무엇을 쓸지 ----------------------------------------------------------------------
 function pickTopic(to) {
-  const t = T[lang()];
+  const t = tt();
   mount(`<section class="screen fit" lang="${lang()}">
     <div class="bar">
       <button class="ghost" id="quit" type="button">${t.back}</button>
@@ -224,12 +276,13 @@ function pickTopic(to) {
 
 // 3. 클라우디아와 한 줄씩 쓰기 ---------------------------------------------------------------
 async function writeMessage(to, topic, replyTo) {
-  const t = T[lang()];
+  const t = tt();
   const p = state.profile;
   const writerRole = p.role === 'friend' ? 'friend' : 'learner';
   const base = {
     writer_role: writerRole, level: p.level, reader_level: (to && to.level) || 1,
     from_name: p.name, to_name: to.name, topic, reply_to: replyTo ? replyTo.body : '',
+    write_lang: writesKorean() ? 'ko' : 'en',
   };
   loading(replyTo ? t.readingLetter : t.preparing);
   let plan = null;
@@ -253,7 +306,7 @@ async function writeMessage(to, topic, replyTo) {
   }
   // 클라우디아가 하는 말 (답장일 때는 편지를 기억하고 어느 부분에 답할지 물어봐요)
   function klaudiaLine(step) {
-    if (step === 'body' && replyTo) return t.replyHint(lang() === 'ko' ? points.map((x) => x.ko) : []);
+    if (step === 'body' && replyTo) return t.replyHint(lang() === 'ko' || writesKorean() ? points.map((x) => x.ko) : []);
     return t.say[step];
   }
   function letterLink() {
@@ -269,8 +322,8 @@ async function writeMessage(to, topic, replyTo) {
     pop.innerHTML = `<div class="sheet-inner" lang="${lang()}">
       <div class="bar"><b class="sheet-title">${esc(t.theirLetter(to.name || ''))}</b><button class="ghost" id="letterClose" type="button">${t.close}</button></div>
       <div class="sheet-list">
-        <p class="en big-letter" lang="en">${esc(replyTo.body)}</p>
-        ${ko ? `<p class="muted big-letter-ko">${esc(ko)}</p>` : ''}
+        ${letterBody(replyTo, 'en big-letter')}
+        ${ko && lang() === 'ko' && api.letterLang(replyTo.body) === 'en' ? `<p class="muted big-letter-ko">${esc(ko)}</p>` : ''}
         <button class="ghost" id="letterHear" type="button">${ICON.sound} ${t.listen}</button>
       </div>
     </div>`;
@@ -278,7 +331,8 @@ async function writeMessage(to, topic, replyTo) {
     document.body.classList.add('sheet-open');
     const close = () => { pop.remove(); document.body.classList.remove('sheet-open'); };
     pop.querySelector('#letterClose').addEventListener('click', close);
-    pop.querySelector('#letterHear').addEventListener('click', (e) => speak(replyTo.body, { rate: 0.85, button: e.currentTarget }));
+    pop.querySelector('#letterHear').addEventListener('click', (e) => speak(readable(replyTo), { rate: 0.85, button: e.currentTarget }));
+    bindLetterToggles(pop);
     pop.querySelector('#letterClose').focus();
   }
   function frame(inner, { compact = false, noDraft = false } = {}) {
@@ -340,8 +394,10 @@ async function writeMessage(to, topic, replyTo) {
   // 말한 뒤: 내가 한 말 ↔ 클라우디아가 고친 문장. 버튼은 화면 맨 아래에 항상 보이게.
   function compareScreen(x) {
     const step = STEPS[si];
-    const korean = hasHangul(x.said);
-    const d = korean ? { mine: esc(x.said), fixed: esc(x.en), changed: true } : wordDiff(x.said, x.en);
+    // 같은 언어로 말했으면 낱말 비교, 다른 언어로 말했으면(번역) 그대로 나란히
+    const sameLang = hasHangul(x.said) === hasHangul(x.en);
+    const korean = !sameLang;
+    const d = sameLang ? wordDiff(x.said, x.en) : { mine: esc(x.said), fixed: esc(x.en), changed: true };
     frame(`<div class="compare" id="compare">
         <p class="label">${t.mine}</p>
         <p class="mine-line" ${korean ? '' : 'lang="en"'}>${d.mine}</p>
@@ -372,7 +428,7 @@ async function writeMessage(to, topic, replyTo) {
 
 // 4. 고치고 보내기 ---------------------------------------------------------------------
 function review(to, lines, replyTo) {
-  const t = T[lang()];
+  const t = tt();
   const learner = lang() === 'ko';
   mount(`<section class="screen fit" lang="${lang()}">
     <div class="bar">
@@ -399,7 +455,7 @@ function review(to, lines, replyTo) {
     $('send').disabled = true;
     $('msg').textContent = t.sending;
     try {
-      await api.sendLetter({ to_id: to.id, body, reply_to: replyTo ? replyTo.id : null });
+      await api.sendLetter({ to_id: to.id, body, reply_to: replyTo ? replyTo.id : null, translateTo: to.learn_lang || 'en' });
       api.markAllFrom(state.user.id, to.id).catch(() => {});
       if (learner) api.addEntry({ kind: 'letter', prompt_en: replyTo ? replyTo.body : null, answer_en: body, answer_ko: lines.map((x) => x.ko).filter(Boolean).join(' ') }).catch(() => {});
       mount(`<section class="screen center" lang="${lang()}">

@@ -1,6 +1,7 @@
 // 로그인, 처음 설정, 홈, 설정 화면
-import { state, register, go, mount, on, $, esc, today, loading, errorScreen, avatar } from './ui.js';
+import { state, register, go, mount, on, $, esc, today, loading, errorScreen, avatar, phoneGuide, bindPhoneGuide } from './ui.js';
 import { prepareDay } from './learn.js';
+import { readable } from './message.js';
 import * as api from './api.js';
 import { TOPICS, topicForDay, cycleForDay, LEVEL_NAMES, personalizeTopics } from './content.js';
 import { TOTAL_DAYS } from './config.js';
@@ -275,6 +276,7 @@ export async function boot() {
     if (api.freshLogin && api.inIOSBrowser() && !state.handoffShown) { state.handoffShown = true; return handoff(); }
     if (!p.name || !p.role) return go('setup');
     if (p.role === 'friend') return go('friend');
+    if (p.learn_lang === 'ko') return go('ko-home');   // 한국어를 배우는 사람 (영어 화면)
     // 처음 온 학습자에게는 몇 가지를 먼저 여쭤봐요 (배경이 비어 있을 때 한 번만)
     const noBg = !(p.background_tags && p.background_tags.length) && !p.background_note;
     if (!p.placement) return go(noBg && !state.aboutDone ? 'about' : 'placement');
@@ -297,15 +299,17 @@ register('setup', () => {
       <input id="name" type="text" autocomplete="given-name" value="${esc(p.name || '')}" placeholder="예: Kim">
       <p class="msg" id="msg" role="alert"></p>
     </div>
+    <p class="label">무엇을 배우고 싶으세요? <span lang="en">· What do you want to learn?</span></p>
     <div class="stack">
-      <button class="big primary" id="learner" type="button">시작하기</button>
+      <button class="big primary" id="learner" type="button">영어를 배울래요 <small lang="en">· English</small></button>
+      <button class="big plain" id="koLearner" type="button" lang="en">I want to learn Korean <small lang="ko">· 한국어</small></button>
     </div>
   </section>`);
-  async function choose(role) {
+  async function choose(role, learn = 'en') {
     const name = $('name').value.trim();
     if (!name) { $('msg').textContent = '이름을 적어 주세요. · Please enter your name.'; $('name').focus(); return; }
     try {
-      state.profile = await api.updateProfile(state.user.id, { name: name.slice(0, 40), role });
+      state.profile = await api.updateProfile(state.user.id, { name: name.slice(0, 40), role, learn_lang: learn });
       try { await api.myCode(); } catch (e2) { /* 나중에 다시 */ }
       state.profile = await api.getProfile(state.user.id);
       boot();
@@ -314,6 +318,7 @@ register('setup', () => {
     }
   }
   on('learner', () => choose('learner'));
+  on('koLearner', () => choose('learner', 'ko'));
 });
 
 // 홈: 오늘의 대시보드 -------------------------------------------------------------------
@@ -331,6 +336,7 @@ function gauge(done, total) {
 
 register('home', async () => {
   const p = state.profile;
+  if (p.learn_lang === 'ko') return go('ko-home');
   personalizeTopics(p);
   const doneToday = p.last_done_date === today();
   const day = p.day;
@@ -393,6 +399,8 @@ register('home', async () => {
       <p class="muted">확인하는 중…</p>
     </div>
 
+    ${phoneGuide('ko')}
+
     <div class="dash-card progress-card">
       ${gauge(Math.min(doneDays, TOTAL_DAYS), TOTAL_DAYS)}
       <div class="progress-info">
@@ -405,6 +413,7 @@ register('home', async () => {
   </section>`);
 
   on('settings', () => go('settings'));
+  bindPhoneGuide('settings');
   on('toApp', () => handoff());
   on('start', () => go('day', { day }));
   on('review', () => go('day', { day: day - 1, review: true }));
@@ -475,15 +484,17 @@ register('home', async () => {
     const [letter, n, members, recent] = await Promise.all([
       api.pendingLetter(state.user.id), api.countPending(state.user.id), api.myContacts(), api.myLetters(state.user.id, 40).catch(() => []),
     ]);
+    if (letter) await api.ensureTranslations([letter], state.user.id, p.learn_lang || 'en').catch(() => {});
     const box = $('msgCard');
     if (!box) return;
     if (letter) {
+      const shown = readable(letter);
       const from = (members.find((m) => m.id === letter.from_id) || {}).name || '가족';
       box.classList.add('has-letter');
       box.innerHTML = `<p class="label">✉️ 오늘 온 편지 ${n > 1 ? `<span class="count-pill">${n}통</span>` : ''}</p>
         <p class="from">${esc(from)}님이 보냈어요</p>
-        <p class="snippet" lang="en" id="snippet">“${esc(letter.body.length > 90 ? letter.body.slice(0, 90) + '…' : letter.body)}”</p>
-        ${letter.body.length > 90 ? '<button class="link-btn more-btn" id="moreLetter" type="button">더보기 ▾</button>' : ''}
+        <p class="snippet" lang="en" id="snippet">“${esc(shown.length > 90 ? shown.slice(0, 90) + '…' : shown)}”</p>
+        ${shown.length > 90 ? '<button class="link-btn more-btn" id="moreLetter" type="button">더보기 ▾</button>' : ''}
         <div class="row msg-actions">
           <button class="big primary" id="replyMsg" type="button">답장하기</button>
           <button class="big plain" id="writeMsg" type="button">편지함</button>
@@ -491,7 +502,7 @@ register('home', async () => {
       on('moreLetter', () => {
         const sn = $('snippet'), mb = $('moreLetter');
         const open = mb.dataset.open === '1';
-        sn.textContent = open ? `“${letter.body.slice(0, 90)}…”` : `“${letter.body}”`;
+        sn.textContent = open ? `“${shown.slice(0, 90)}…”` : `“${shown}”`;
         mb.dataset.open = open ? '' : '1';
         mb.textContent = open ? '더보기 ▾' : '접기 ▴';
       });

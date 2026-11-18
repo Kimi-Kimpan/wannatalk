@@ -4,7 +4,7 @@ import { speak, prefetch, setVoiceLevel, cancelListening, canListen, bestSimilar
 import { TOPICS, topicForDay, cycleForDay, SPEECH_RATE } from './content.js';
 import { TALK_SECONDS, TOTAL_DAYS } from './config.js';
 import * as api from './api.js';
-import { wordDiff, hasHangul } from './message.js';
+import { wordDiff, hasHangul, letterBody, bindLetterToggles, readable } from './message.js';
 
 const STEP_NAMES = { letter: '편지', cards: '문장 카드', words: '낱말 10개', qa: '묻고 답하기', talk: '3분 대화' };
 
@@ -187,6 +187,7 @@ async function letterStep(S) {
     from = members.find((m) => m.id === L.from_id) || from;
   } catch (e) { /* 무시 */ }
   const fromName = from.name || '가족';
+  await api.ensureTranslations([L], state.user.id, state.profile.learn_lang || 'en').catch(() => {});
   const base = {
     writer_role: 'learner', level: S.level, reader_level: from.level || 1,
     from_name: state.profile.name, to_name: fromName, topic: 'reply', reply_to: L.body,
@@ -194,7 +195,7 @@ async function letterStep(S) {
   // 편지를 읽는 동안 답장 준비를 뒤에서 해 둬요 (기다리는 화면 없이)
   let plan = null;
   const planP = api.ai('compose', { ...base, mode: 'plan', notes: S.notes.slice(0, 10) })
-    .then((r) => { plan = r; if ($('letterKo') && r && r.letter_ko) $('letterKo').textContent = r.letter_ko; return r; })
+    .then((r) => { plan = r; if ($('letterKo') && r && r.letter_ko && api.letterLang(L.body) === 'en') $('letterKo').textContent = r.letter_ko; return r; })
     .catch(() => null);
 
   const ok = (x) => x && typeof x.en === 'string' && x.en.trim();
@@ -252,15 +253,16 @@ async function letterStep(S) {
     pop.innerHTML = `<div class="sheet-inner">
       <div class="bar"><b class="sheet-title">${esc(fromName)}님 편지</b><button class="ghost" id="letterClose" type="button">닫기</button></div>
       <div class="sheet-list">
-        <p class="en big-letter" lang="en">${esc(L.body)}</p>
-        ${plan && plan.letter_ko ? `<p class="muted big-letter-ko">${esc(plan.letter_ko)}</p>` : ''}
+        ${letterBody(L, 'en big-letter')}
+        ${plan && plan.letter_ko && api.letterLang(L.body) === 'en' ? `<p class="muted big-letter-ko">${esc(plan.letter_ko)}</p>` : ''}
         <button class="ghost" id="letterHear" type="button">${ICON.sound} 듣기</button>
       </div></div>`;
     document.body.appendChild(pop);
     document.body.classList.add('sheet-open');
     const close = () => { pop.remove(); document.body.classList.remove('sheet-open'); };
     pop.querySelector('#letterClose').addEventListener('click', close);
-    pop.querySelector('#letterHear').addEventListener('click', (e) => speak(L.body, { rate: S.rate, button: e.currentTarget }));
+    pop.querySelector('#letterHear').addEventListener('click', (e) => speak(readable(L), { rate: S.rate, button: e.currentTarget }));
+    bindLetterToggles(pop);
   }
   const ask = (x) => `${esc(x.ko)} <b>${x.ask ? '뭐라고 물어볼까요?' : '뭐라고 답해 볼까요?'}</b>`;
   // 한 줄을 다 만들었어요: 요약에서 들어왔으면 그 줄을 바꾸고(덧붙이지 않아요) 요약으로
@@ -288,8 +290,8 @@ async function letterStep(S) {
       ${header(S, 0)}
       <h2>✉️ ${esc(fromName)}님이 편지를 보냈어요</h2>
       <div class="card letter grow-box">
-        <p class="en letter-text" lang="en">${esc(L.body)}</p>
-        <p class="ko" id="letterKo">${plan && plan.letter_ko ? esc(plan.letter_ko) : ''}</p>
+        ${letterBody(L, 'en letter-text')}
+        <p class="ko" id="letterKo">${plan && plan.letter_ko && api.letterLang(L.body) === 'en' ? esc(plan.letter_ko) : ''}</p>
       </div>
       <div class="listen-row">
         <button class="listen" id="play" type="button">${ICON.sound} 듣기</button>
@@ -301,8 +303,9 @@ async function letterStep(S) {
       </div>
     </section>`);
     bindQuit();
-    on('play', () => say(L.body, S));
-    on('slow', () => say(L.body, S, 'play', true));
+    on('play', () => say(readable(L), S));
+    on('slow', () => say(readable(L), S, 'play', true));
+    bindLetterToggles();
     on('later', async () => { try { await api.markLetter(L.id); } catch (e) { /* 무시 */ } nextStep(S); });
     on('write', async () => {
       if (!plan) { loading('클라우디아가 답장 쓸 준비를 하고 있어요…'); await planP; }
@@ -505,7 +508,7 @@ async function letterStep(S) {
       $('send').disabled = true;
       $('msg').textContent = '보내는 중이에요…';
       try {
-        await api.sendLetter({ to_id: L.from_id, body: text.slice(0, 2000), reply_to: L.id });
+        await api.sendLetter({ to_id: L.from_id, body: text.slice(0, 2000), reply_to: L.id, translateTo: from.learn_lang || 'en' });
         await api.markAllFrom(state.user.id, L.from_id).catch(() => api.markLetter(L.id));
         S.score.letter = true;
         save(S, { kind: 'letter', prompt_en: L.body, answer_en: text, answer_ko: lines().map((i) => i.ko).filter(Boolean).join(' ') });

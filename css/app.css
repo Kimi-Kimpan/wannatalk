@@ -925,3 +925,15 @@ body.sheet-open { overflow: hidden; }
 .screen.fit.qa .say-tip:empty { display: flex; visibility: hidden; }
 /* 그림이 없는 낱말은 빈 자리를 남기지 않아요 */
 .choice .emoji:empty { flex-basis: 0; width: 0; margin-right: -14px; }
+/* 받은 편지: 번역 먼저, 원문 스위치 */
+.tr-wrap { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.tr-toggle { border: 1.5px solid var(--line); background: transparent; color: var(--primary); border-radius: 999px; padding: 4px 12px; min-height: 36px; font-size: 15px; font-weight: 700; }
+.tr-toggle[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 16%, transparent); }
+.snippet-box .snippet { margin: 0; }
+/* 휴대폰 설치 안내 */
+.phone-guide h2 { margin-top: 0; }
+.guide-steps { margin: 6px 0 12px; padding-left: 22px; display: flex; flex-direction: column; gap: 12px; font-size: 18px; line-height: 1.45; }
+.guide-steps li.done b { text-decoration: line-through; opacity: .7; }
+.guide-steps .muted { font-size: 15px; }
+.guide-url { color: var(--ink); word-break: break-all; }
+.ko-home h1 { margin-bottom: 0; }

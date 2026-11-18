@@ -310,3 +310,44 @@ export function carousel(box, items, { action = '이 문장으로 대답하기',
   render();
   return { index: () => i };
 }
+
+// 휴대폰 설치 안내: 이메일로 처음 들어온 뒤 → 아이디 만들기 → 홈 화면에 추가 → 휴대폰에서 아이디로 로그인
+const GUIDE_KEY = 'wt-phone-guide-done';
+export function isStandalone() {
+  return navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+}
+export function phoneGuide(lang = 'ko') {
+  let done = false;
+  try { done = localStorage.getItem(GUIDE_KEY) === '1'; } catch (e) { /* 무시 */ }
+  if (done || isStandalone()) return '';
+  const hasId = !!(state.profile && state.profile.username);
+  const url = location.host + location.pathname.replace(/index\.html$/, '');
+  const T = lang === 'en' ? {
+    title: '📱 Use it on your phone', s1: 'Create your ID and password', s1b: 'Open settings', s1ok: `Done · ID: ${esc((state.profile && state.profile.username) || '')}`,
+    s2: 'Add WannaTalk to your home screen', ios: '<b>iPhone</b>: open the site in Safari → Share □↑ → “Add to Home Screen”',
+    android: '<b>Android</b>: open it in Chrome → ⋮ menu → “Add to Home screen” or “Install app”',
+    s3: 'Open the new WannaTalk icon and sign in with your ID', addr: 'Address to open on your phone', ok: 'Got it',
+  } : {
+    title: '📱 휴대폰에서 편하게 쓰려면', s1: '아이디·비밀번호 만들기', s1b: '설정에서 만들기', s1ok: `만들었어요 · 아이디 ${esc((state.profile && state.profile.username) || '')}`,
+    s2: '휴대폰 홈 화면에 앱 추가하기', ios: '<b>아이폰</b>: Safari로 주소를 열고 → 아래 공유 □↑ → “홈 화면에 추가”',
+    android: '<b>갤럭시</b>: Chrome으로 주소를 열고 → 오른쪽 위 ⋮ → “홈 화면에 추가” 또는 “앱 설치”',
+    s3: '홈 화면의 WannaTalk을 열고 아이디로 로그인', addr: '휴대폰에서 열 주소', ok: '다 했어요',
+  };
+  return `<div class="panel phone-guide" id="phoneGuide">
+    <h2>${T.title}</h2>
+    <ol class="guide-steps">
+      <li class="${hasId ? 'done' : ''}"><b>${T.s1}</b><br>${hasId ? `<span class="muted">✓ ${T.s1ok}</span>` : `<button class="ghost small" id="guideSettings" type="button">${T.s1b} →</button>`}</li>
+      <li><b>${T.s2}</b><br><span class="muted">${T.addr}: <b class="guide-url">${esc(url)}</b></span><br><span class="muted">${T.ios}</span><br><span class="muted">${T.android}</span></li>
+      <li><b>${T.s3}</b></li>
+    </ol>
+    <button class="big plain" id="guideDone" type="button">${T.ok}</button>
+  </div>`;
+}
+export function bindPhoneGuide(settingsRoute) {
+  on('guideSettings', () => go(settingsRoute));
+  on('guideDone', () => {
+    try { localStorage.setItem(GUIDE_KEY, '1'); } catch (e) { /* 무시 */ }
+    const g = $('phoneGuide');
+    if (g) g.remove();
+  });
+}
