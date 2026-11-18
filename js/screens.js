@@ -6,6 +6,10 @@ import * as api from './api.js';
 import { TOPICS, topicForDay, cycleForDay, LEVEL_NAMES, personalizeTopics } from './content.js';
 import { TOTAL_DAYS } from './config.js';
 
+// 로그인 화면의 말: 한국어를 배우는 사람(영어 화면)에게는 영어로
+const EN = () => (state.profile && state.profile.learn_lang ? state.profile.learn_lang === 'ko' : learnChoice() === 'ko');
+const L = (ko, en) => (EN() ? en : ko);
+
 // 첫 화면과 로그인 ---------------------------------------------------------------------
 register('login', () => {
   let email = '';
@@ -20,9 +24,9 @@ register('login', () => {
     window.__wtAuthErr = '';
     mount(`<section class="screen landing">
       ${linkErr ? `<div class="panel link-error" role="alert">
-        <p class="lead"><b>이 로그인 링크는 쓸 수 없어요.</b></p>
-        <p>이미 한 번 쓴 링크이거나, 시간이 지났거나, 새 메일을 받아서 예전 링크가 된 경우예요. <b>가장 최근에 받은 메일</b>의 링크만 돼요.</p>
-        <button class="big primary" id="resend" type="button">로그인 메일 다시 받기</button>
+        <p class="lead"><b>${L('이 로그인 링크는 쓸 수 없어요.', 'This sign-in link cannot be used.')}</b></p>
+        <p>${L('이미 한 번 쓴 링크이거나, 시간이 지났거나, 새 메일을 받아서 예전 링크가 된 경우예요. <b>가장 최근에 받은 메일</b>의 링크만 돼요.', 'It was already used, it has expired, or a newer email replaced it. Only the link in the <b>newest email</b> works.')}</p>
+        <button class="big primary" id="resend" type="button">${L('로그인 메일 다시 받기', 'Get a new sign-in email')}</button>
       </div>` : ''}
       <div class="bar">
         <div class="brand">WannaTalk</div>
@@ -58,15 +62,15 @@ register('login', () => {
     const say = (t) => { if ($('msg')) $('msg').textContent = t; };
     let t = '';
     try { t = (await navigator.clipboard.readText() || '').trim(); } catch (err) { /* 권한 없음 */ }
-    if (!t) { say('복사한 로그인이 없어요. 메일 속 Sign in 을 눌러 Safari에서 "앱으로 로그인 옮기기"를 먼저 해 주세요.'); return; }
-    say('확인하는 중이에요…');
+    if (!t) { say(L('복사한 로그인이 없어요. 메일 속 Sign in 을 눌러 Safari에서 "앱으로 로그인 옮기기"를 먼저 해 주세요.', 'Nothing to paste yet. Tap “Sign in” in the email, then tap “Move sign-in to the app” in Safari first.')); return; }
+    say(L('확인하는 중이에요…', 'Checking…'));
     try {
       const ses = await api.signInWithLink(t, asAdmin ? api.adminClient() : api.sb);
       if (asAdmin) { location.href = 'admin.html'; return; }
       state.user = ses.user;
       boot();
     } catch (err) {
-      say(err.message === 'no_token' ? '복사한 내용이 로그인이 아니에요. 다시 해 주세요.' : '이 로그인은 만료됐어요. 메일을 다시 받아 주세요.');
+      say(err.message === 'no_token' ? L('복사한 내용이 로그인이 아니에요. 다시 해 주세요.', 'What you copied is not a sign-in. Please try again.') : L('이 로그인은 만료됐어요. 메일을 다시 받아 주세요.', 'This sign-in has expired. Please get a new email.'));
     }
   }
 
@@ -74,22 +78,22 @@ register('login', () => {
   function stepId(msg = '') {
     mount(`<section class="screen">
       <div class="bar">
-        <button class="ghost" id="back" type="button">← 처음 화면</button>
-        <div class="mode-pill ${admin ? 'admin' : ''}">${admin ? '관리자 로그인' : '레슨 로그인'}</div>
+        <button class="ghost" id="back" type="button">${L('← 처음 화면', '← Back')}</button>
+        <div class="mode-pill ${admin ? 'admin' : ''}">${admin ? L('관리자 로그인', 'Admin sign-in') : L('레슨 로그인', 'Lesson sign-in')}</div>
       </div>
-      <h1>${admin ? '관리자 로그인' : '로그인'}</h1>
+      <h1>${admin ? L('관리자 로그인', 'Admin sign-in') : L('로그인', 'Sign in')}</h1>
       <form id="idf" class="form" novalidate>
-        <label for="uid">아이디</label>
+        <label for="uid">${L('아이디', 'Username')}</label>
         <input id="uid" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" inputmode="text">
-        <label for="pw">비밀번호</label>
+        <label for="pw">${L('비밀번호', 'Password')}</label>
         <input id="pw" type="password" autocomplete="current-password">
         <p class="msg" id="msg" role="alert">${esc(msg)}</p>
-        <button class="big primary" type="submit" id="idBtn">로그인</button>
+        <button class="big primary" type="submit" id="idBtn">${L('로그인', 'Sign in')}</button>
       </form>
       <div class="panel">
-        <p class="lead">처음이거나 아이디가 없으면</p>
-        <button class="big plain" id="toEmail" type="button">이메일로 로그인하기 <small>로그인 메일을 받아요</small></button>
-        <p class="note">이메일로 들어간 뒤 <b>설정</b>에서 아이디와 비밀번호를 만들면, 다음부터는 메일 없이 들어올 수 있어요.</p>
+        <p class="lead">${L('처음이거나 아이디가 없으면', 'First time, or no username yet?')}</p>
+        <button class="big plain" id="toEmail" type="button">${L('이메일로 로그인하기 <small>로그인 메일을 받아요</small>', 'Sign in with email <small>We send you a sign-in link</small>')}</button>
+        <p class="note">${L('이메일로 들어간 뒤 <b>설정</b>에서 아이디와 비밀번호를 만들면, 다음부터는 메일 없이 들어올 수 있어요.', 'After you sign in by email, make a username and password in <b>Settings</b>. Next time you can sign in without email.')}</p>
       </div>
     </section>`);
     on('back', landing);
@@ -97,9 +101,9 @@ register('login', () => {
     $('idf').addEventListener('submit', async (e) => {
       e.preventDefault();
       const u = $('uid').value.trim(), pw = $('pw').value;
-      if (!u || !pw) { $('msg').textContent = '아이디와 비밀번호를 적어 주세요.'; return; }
+      if (!u || !pw) { $('msg').textContent = L('아이디와 비밀번호를 적어 주세요.', 'Please enter your username and password.'); return; }
       $('idBtn').disabled = true;
-      $('msg').textContent = '확인하는 중이에요…';
+      $('msg').textContent = L('확인하는 중이에요…', 'Checking…');
       try {
         const ses = await api.loginWithId(u, pw, admin ? api.adminClient() : api.sb);
         if (admin) { location.href = 'admin.html'; return; }
@@ -107,8 +111,8 @@ register('login', () => {
         boot();
       } catch (err) {
         $('idBtn').disabled = false;
-        $('msg').textContent = err.message === 'too_many' ? '여러 번 틀려서 잠시 막혔어요. 한 시간 뒤에 다시 해 주세요.'
-          : err.message === 'invalid' ? '아이디나 비밀번호가 맞지 않아요.' : '인터넷을 확인하고 다시 눌러 주세요.';
+        $('msg').textContent = err.message === 'too_many' ? L('여러 번 틀려서 잠시 막혔어요. 한 시간 뒤에 다시 해 주세요.', 'Too many tries. Please try again in an hour.')
+          : err.message === 'invalid' ? L('아이디나 비밀번호가 맞지 않아요.', 'The username or password is not right.') : L('인터넷을 확인하고 다시 눌러 주세요.', 'Please check your internet and try again.');
       }
     });
   }
@@ -116,29 +120,29 @@ register('login', () => {
   function stepEmail(msg = '') {
     mount(`<section class="screen">
       <div class="bar">
-        <button class="ghost" id="back" type="button">← 돌아가기</button>
-        <div class="mode-pill ${admin ? 'admin' : ''}">${admin ? '관리자 로그인' : '레슨 로그인'}</div>
+        <button class="ghost" id="back" type="button">${L('← 돌아가기', '← Back')}</button>
+        <div class="mode-pill ${admin ? 'admin' : ''}">${admin ? L('관리자 로그인', 'Admin sign-in') : L('레슨 로그인', 'Lesson sign-in')}</div>
       </div>
-      <h1>${admin ? '관리자 이메일을 적어 주세요' : '이메일로 시작해요'}</h1>
-      <p class="sub" lang="en">${admin ? 'Admin sign-in' : 'Sign in with your email'}</p>
+      <h1>${admin ? L('관리자 이메일을 적어 주세요', 'Enter the admin email') : L('이메일로 시작해요', 'Sign in with your email')}</h1>
+      ${EN() ? '' : `<p class="sub" lang="en">${admin ? 'Admin sign-in' : 'Sign in with your email'}</p>`}
       <form id="f" class="form" novalidate>
-        <label for="email">이메일 주소</label>
+        <label for="email">${L('이메일 주소', 'Email address')}</label>
         <input id="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" value="${esc(admin ? '' : email)}" placeholder="name@example.com">
         <p class="msg" id="msg" role="alert">${esc(msg)}</p>
-        <button class="big primary" type="submit" id="send">로그인 메일 받기 <small lang="en">Email me a sign-in link</small></button>
+        <button class="big primary" type="submit" id="send">${L('로그인 메일 받기 <small lang="en">Email me a sign-in link</small>', 'Email me a sign-in link')}</button>
       </form>
-      <button class="link-btn" id="switch" type="button">${admin ? '레슨 받는 사람으로 로그인하기' : '관리자로 로그인하기'}</button>
-      <p class="note">메일로 로그인 링크를 보내 드려요. 한 번 로그인하면 다음부터는 바로 열려요.</p>
+      <button class="link-btn" id="switch" type="button">${admin ? L('레슨 받는 사람으로 로그인하기', 'Sign in as a learner') : L('관리자로 로그인하기', 'Admin sign-in')}</button>
+      <p class="note">${L('메일로 로그인 링크를 보내 드려요. 한 번 로그인하면 다음부터는 바로 열려요.', 'We email you a sign-in link. After that, the app opens straight away.')}</p>
     </section>`);
     on('back', () => stepId());
     on('switch', () => { admin = !admin; stepEmail(); });
     $('f').addEventListener('submit', async (e) => {
       e.preventDefault();
       const value = $('email').value.trim().toLowerCase();
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) { $('msg').textContent = '이메일 주소를 다시 확인해 주세요.'; return; }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) { $('msg').textContent = L('이메일 주소를 다시 확인해 주세요.', 'Please check the email address.'); return; }
       email = value;
       $('send').disabled = true;
-      $('msg').textContent = '보내는 중이에요…';
+      $('msg').textContent = L('보내는 중이에요…', 'Sending…');
       try {
         await api.sendCode(email, { admin });
         if (!admin) { try { localStorage.setItem('wt-email', email); } catch (e2) { /* 무시 */ } }
@@ -146,11 +150,11 @@ register('login', () => {
       } catch (err) {
         $('send').disabled = false;
         $('msg').textContent = /saving new user|signup_limit|database error/i.test(err.message || '')
-          ? '지금은 가입 인원이 다 찼어요. 관리자에게 문의해 주세요. · Sign-ups are full right now.'
+          ? L('지금은 가입 인원이 다 찼어요. 관리자에게 문의해 주세요. · Sign-ups are full right now.', 'Sign-ups are full right now. Please contact the admin.')
           : /rate|seconds|limit/i.test(err.message || '')
-          ? '로그인 메일을 너무 많이 보냈어요. 한 시간에 2통까지만 보낼 수 있어서, 잠시 뒤 다시 눌러 주세요.'
-          : admin ? '보내지 못했어요. 관리자 이메일이 맞는지, 앱에 가입된 주소인지 확인해 주세요.'
-          : '메일을 보내지 못했어요. 주소를 확인하고 다시 눌러 주세요.';
+          ? L('로그인 메일을 너무 많이 보냈어요. 한 시간에 2통까지만 보낼 수 있어서, 잠시 뒤 다시 눌러 주세요.', 'Too many sign-in emails. We can send 2 an hour, so please try again a little later.')
+          : admin ? L('보내지 못했어요. 관리자 이메일이 맞는지, 앱에 가입된 주소인지 확인해 주세요.', 'Could not send. Check that this is the admin email and that it has an account.')
+          : L('메일을 보내지 못했어요. 주소를 확인하고 다시 눌러 주세요.', 'Could not send the email. Check the address and try again.');
       }
     });
   }
@@ -158,31 +162,31 @@ register('login', () => {
   function stepCode(msg = '') {
     mount(`<section class="screen scroll">
       <div class="brand">WannaTalk</div>
-      <h1>메일함을 열어 주세요</h1>
-      <p class="sub">${esc(email)} <span lang="en">· Check your email</span></p>
+      <h1>${L('메일함을 열어 주세요', 'Check your email')}</h1>
+      <p class="sub">${esc(email)}${EN() ? '' : ' <span lang="en">· Check your email</span>'}</p>
 
       <div class="panel">
-        <p class="lead"><b>1.</b> 메일 속 <b lang="en">Sign in</b>을 누르면 바로 ${admin ? '관리자 화면이 열려요' : '로그인돼요'}.</p>
-        <p class="muted" lang="en">Tap “Sign in” in the email we just sent.</p>
+        ${EN() ? `<p class="lead"><b>1.</b> Tap <b>Sign in</b> in the email we just sent. ${admin ? 'The admin page opens.' : 'You are in.'}</p>` : `<p class="lead"><b>1.</b> 메일 속 <b lang="en">Sign in</b>을 누르면 바로 ${admin ? '관리자 화면이 열려요' : '로그인돼요'}.</p>
+        <p class="muted" lang="en">Tap “Sign in” in the email we just sent.</p>`}
       </div>
 
       <form id="linkForm" class="form panel" novalidate>
-        <p class="lead"><b>2.</b> Safari 같은 다른 창에서 열렸다면</p>
-        <p class="muted">그 창에서 <b>앱으로 로그인 옮기기</b>를 누른 뒤, 여기로 돌아와 아래 버튼을 누르세요.</p>
-        <button class="big primary" id="paste" type="button">복사한 로그인 붙여넣기 <small lang="en">Paste sign-in</small></button>
-        <label for="link" class="muted small-label">버튼이 안 되면 여기에 길게 눌러 붙여넣기</label>
+        <p class="lead"><b>2.</b> ${L('Safari 같은 다른 창에서 열렸다면', 'If it opened in another window, like Safari')}</p>
+        <p class="muted">${L('그 창에서 <b>앱으로 로그인 옮기기</b>를 누른 뒤, 여기로 돌아와 아래 버튼을 누르세요.', 'Tap <b>Move sign-in to the app</b> there, then come back and tap the button below.')}</p>
+        <button class="big primary" id="paste" type="button">${L('복사한 로그인 붙여넣기 <small lang="en">Paste sign-in</small>', 'Paste sign-in')}</button>
+        <label for="link" class="muted small-label">${L('버튼이 안 되면 여기에 길게 눌러 붙여넣기', 'If the button does not work, press and hold here to paste')}</label>
         <input id="link" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…">
-        <button class="plain mid" id="linkBtn" type="submit">이 링크로 로그인</button>
+        <button class="plain mid" id="linkBtn" type="submit">${L('이 링크로 로그인', 'Sign in with this link')}</button>
       </form>
 
       <p class="msg" id="msg" role="alert">${esc(msg)}</p>
-      <button class="plain mid wide" id="ok" type="button">로그인했어요 · 화면 새로 보기</button>
+      <button class="plain mid wide" id="ok" type="button">${L('로그인했어요 · 화면 새로 보기', 'I have signed in · Refresh')}</button>
 
       <div class="row">
-        <button class="plain mid" id="again" type="button">메일 다시 받기</button>
-        <button class="plain mid" id="change" type="button">이메일 바꾸기</button>
+        <button class="plain mid" id="again" type="button">${L('메일 다시 받기', 'Send again')}</button>
+        <button class="plain mid" id="change" type="button">${L('이메일 바꾸기', 'Change email')}</button>
       </div>
-      <p class="note">메일이 안 보이면 스팸함도 확인해 주세요. 메일은 몇 분에 한 번만 보낼 수 있어요.</p>
+      <p class="note">${L('메일이 안 보이면 스팸함도 확인해 주세요. 메일은 몇 분에 한 번만 보낼 수 있어요.', 'No email? Check your spam folder. We can only send one every few minutes.')}</p>
     </section>`);
 
     const done = (session) => {
@@ -195,31 +199,31 @@ register('login', () => {
     $('linkForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const link = $('link').value.trim();
-      if (!link) { say('메일 속 Sign in 링크를 붙여넣어 주세요.'); return; }
+      if (!link) { say(L('메일 속 Sign in 링크를 붙여넣어 주세요.', 'Please paste the Sign in link from the email.')); return; }
       $('linkBtn').disabled = true;
-      say('확인하는 중이에요…');
+      say(L('확인하는 중이에요…', 'Checking…'));
       await loginWith(link);
       if ($('linkBtn')) $('linkBtn').disabled = false;
     });
     async function loginWith(link) {
-      say('확인하는 중이에요…');
+      say(L('확인하는 중이에요…', 'Checking…'));
       try { done(await api.signInWithLink(link, admin ? api.adminClient() : api.sb)); }
       catch (err) {
         say(err.message === 'no_token'
-          ? '로그인 링크가 아닌 것 같아요. 메일 속 Sign in 을 길게 눌러 "링크 복사"를 골라 주세요.'
-          : '이 링크는 이미 쓰였거나 만료됐어요. 메일을 다시 받아 새 링크로 해 주세요.');
+          ? L('로그인 링크가 아닌 것 같아요. 메일 속 Sign in 을 길게 눌러 "링크 복사"를 골라 주세요.', 'That does not look like a sign-in link. Press and hold “Sign in” in the email and choose “Copy link”.')
+          : L('이 링크는 이미 쓰였거나 만료됐어요. 메일을 다시 받아 새 링크로 해 주세요.', 'This link was already used or has expired. Get a new email and use the new link.'));
       }
     }
     on('paste', () => pasteLogin(admin));
 
     on('ok', async () => {
       const u = await api.currentUser();
-      if (!u) { say('이 화면에서는 아직 로그인되지 않았어요. 2번 방법(링크 복사)으로 해 주세요.'); return; }
+      if (!u) { say(L('이 화면에서는 아직 로그인되지 않았어요. 2번 방법(링크 복사)으로 해 주세요.', 'You are not signed in here yet. Please use step 2 (copy the link).')); return; }
       done({ user: u });
     });
     on('again', async () => {
-      try { await api.sendCode(email, { admin }); stepCode('새 메일을 보냈어요.'); }
-      catch (err) { stepCode('잠시 뒤에 다시 눌러 주세요.'); }
+      try { await api.sendCode(email, { admin }); stepCode(L('새 메일을 보냈어요.', 'We sent a new email.')); }
+      catch (err) { stepCode(L('잠시 뒤에 다시 눌러 주세요.', 'Please try again in a moment.')); }
     });
     on('change', () => stepEmail());
   }
@@ -231,24 +235,24 @@ register('login', () => {
 function handoff() {
   mount(`<section class="screen center">
     ${avatar('lg')}
-    <h1>로그인됐어요!</h1>
-    <p class="lead">홈 화면의 WannaTalk 앱에서 공부하시려면<br>아래 버튼을 눌러 주세요.</p>
-    <button class="big primary huge" id="copyLogin" type="button">앱으로 로그인 옮기기 <small lang="en">Move sign-in to the app</small></button>
-    <button class="link-btn" id="stayHere" type="button">이 창에서 그냥 공부하기</button>
+    <h1>${L('로그인됐어요!', 'You are signed in!')}</h1>
+    <p class="lead">${L('홈 화면의 WannaTalk 앱에서 공부하시려면<br>아래 버튼을 눌러 주세요.', 'To study in the WannaTalk app on your home screen,<br>tap the button below.')}</p>
+    <button class="big primary huge" id="copyLogin" type="button">${L('앱으로 로그인 옮기기 <small lang="en">Move sign-in to the app</small>', 'Move sign-in to the app')}</button>
+    <button class="link-btn" id="stayHere" type="button">${L('이 창에서 그냥 공부하기', 'Just study in this window')}</button>
   </section>`);
   on('stayHere', () => boot());
   on('copyLogin', async () => {
     let r;
     try { r = await api.handoffCopy(); } catch (e) { return boot(); }
     mount(`<section class="screen center">
-      <h1>${r.copied ? '복사했어요' : '한 번만 더 해 주세요'}</h1>
-      ${r.copied ? '' : `<p class="lead">아래 칸을 길게 눌러 <b>전체 선택 → 복사</b> 해 주세요.</p>
+      <h1>${r.copied ? L('복사했어요', 'Copied') : L('한 번만 더 해 주세요', 'One more step')}</h1>
+      ${r.copied ? '' : `<p class="lead">${L('아래 칸을 길게 눌러 <b>전체 선택 → 복사</b> 해 주세요.', 'Press and hold the box below, then <b>Select All → Copy</b>.')}</p>
         <input type="url" readonly value="${esc(r.link)}" id="lk" style="width:100%">`}
       <div class="panel" style="text-align:left">
-        <p class="lead"><b>1.</b> 이 창을 닫고 홈 화면의 <b>WannaTalk</b> 앱을 여세요.</p>
-        <p class="lead"><b>2.</b> <b>복사한 로그인 붙여넣기</b>를 누르면 끝이에요.</p>
+        <p class="lead"><b>1.</b> ${L('이 창을 닫고 홈 화면의 <b>WannaTalk</b> 앱을 여세요.', 'Close this window and open the <b>WannaTalk</b> app on your home screen.')}</p>
+        <p class="lead"><b>2.</b> ${L('<b>복사한 로그인 붙여넣기</b>를 누르면 끝이에요.', 'On the first screen, tap <b>Move sign-in</b>. That is it.')}</p>
       </div>
-      <p class="note">이 창(Safari)에서는 로그아웃됐어요.</p>
+      <p class="note">${L('이 창(Safari)에서는 로그아웃됐어요.', 'You are now signed out in this window (Safari).')}</p>
     </section>`);
     const lk = $('lk'); if (lk) { lk.focus(); lk.select(); }
   });
@@ -256,7 +260,7 @@ function handoff() {
 
 // 로그인 뒤 어디로 갈지 정하기 ---------------------------------------------------------
 export async function boot() {
-  loading('불러오는 중이에요…');
+  loading(L('불러오는 중이에요…', 'Loading…'));
   try {
     if (!state.user) state.user = await api.currentUser();
     if (!state.user) return go('login');
@@ -271,7 +275,7 @@ export async function boot() {
       // 관리자가 삭제한 계정: 들어올 수 없어요
       await api.signOut().catch(() => {});
       state.user = null; state.profile = null;
-      mount(`<section class="screen center"><h1>이 계정은 사용할 수 없어요</h1><p class="lead">관리자에게 문의해 주세요.</p><button class="big plain" id="toLogin" type="button">처음으로</button></section>`);
+      mount(`<section class="screen center"><h1>${L('이 계정은 사용할 수 없어요', 'This account can no longer be used')}</h1><p class="lead">${L('관리자에게 문의해 주세요.', 'Please contact the admin.')}</p><button class="big plain" id="toLogin" type="button">${L('처음으로', 'Start')}</button></section>`);
       on('toLogin', () => go('login'));
       return;
     }
