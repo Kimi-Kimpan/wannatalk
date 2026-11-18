@@ -135,8 +135,7 @@ register('ko-keys', (arg) => {
       : t.kind === 'build'
       ? `<p class="label">Build this syllable</p>
          <div class="kk-big" lang="ko">${t.target}</div>
-         <p class="kk-sound" lang="ko">${[p0.cho, p0.jung, p0.jong].filter(Boolean).join(' + ')}</p>
-         <div class="kk-slots" lang="ko" id="slots"></div>`
+         <p class="kk-sound" lang="ko">${[p0.cho, p0.jung, p0.jong].filter(Boolean).join(' + ')}</p>`
       : `<p class="label">Listen and type</p>
          <p class="kk-meaning">“${esc(t.meaning)}”</p>
          <p class="kk-sound" id="roman">${showRoman ? esc(t.roman) : `<button class="link-btn" id="showRoman" type="button">Show how it sounds</button>`}</p>`;
@@ -148,7 +147,7 @@ register('ko-keys', (arg) => {
       <div class="kk-typed" id="typed" lang="ko" aria-live="polite"></div>
       <p class="hint" id="hint" aria-live="polite"></p>
       <div class="nav kk-nav">
-        <button class="prev" id="helpKey" type="button">Show me</button>
+        <button class="prev hint-btn" id="helpKey" type="button" aria-pressed="false">Hint</button>
         <button class="next" id="next" type="button">Skip</button>
       </div>
       ${keyboardHtml()}
@@ -159,7 +158,9 @@ register('ko-keys', (arg) => {
     on('showRoman', () => { $('roman').textContent = t.roman; });
     // 조립·글자 단계는 다음 글쇠를 처음부터 알려 주고, 낱말 단계는 'Show me'를 누르면 알려 줘요
     let guide = t.kind !== 'word';
-    on('helpKey', () => { guide = true; refresh(); });
+    // Hint: 누를 글쇠를 빛나게 / 다시 누르면 숨겨요
+    const paintHint = () => { $('helpKey').classList.toggle('on', guide); $('helpKey').setAttribute('aria-pressed', String(guide)); };
+    on('helpKey', () => { guide = !guide; paintHint(); refresh(); });
     const kb = bindKeyboard((j) => {
       if (j === 'BACK') typed.pop(); else if (!done) typed.push(j);
       refresh();
@@ -168,13 +169,6 @@ register('ko-keys', (arg) => {
     function refresh() {
       const out = compose(typed);
       $('typed').innerHTML = out ? esc(out) : '<span class="muted">…</span>';
-      if (t.kind === 'build' && $('slots')) {
-        const ps = parts(out.length === 1 ? out : '');
-        const got = out.length === 1 && /[가-힣]/.test(out) ? ps : { cho: typed[0] || '', jung: '', jong: '' };
-        const need = parts(t.target);
-        $('slots').innerHTML = [['first', got.cho, true], ['middle', got.jung, true], ['final', got.jong, !!need.jong]]
-          .filter((x) => x[2]).map(([name, v]) => `<span class="kk-slot ${name === 'middle' ? 'sv' : 'sc'} ${v ? 'filled' : ''}"><b>${esc(v || ' ')}</b><small lang="en">${name}</small></span>`).join('');
-      }
       const nk = nextKey(typed, t.target);
       if (out === t.target) {
         done = true;
@@ -194,6 +188,7 @@ register('ko-keys', (arg) => {
       else $('hint').textContent = '';
       kb.glow(guide || nk === 'BACK' ? nk : null);
     }
+    paintHint();
     refresh();
     if (t.kind === 'meet') setTimeout(() => { if ($('hear') && tasks[i] === t) speak(sayable(t.target), { rate: 0.8, button: $('hear') }); }, 300);
     if (t.kind === 'word') setTimeout(() => { if ($('hear') && tasks[i] === t) speak(t.target, { rate: 0.8, button: $('hear') }); }, 300);

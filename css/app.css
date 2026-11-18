@@ -1025,3 +1025,5 @@ body.sheet-open { overflow: hidden; }
 .sy-tip { font-size: 17px; margin: 0; }
 .screen.fit.tighter .sy-t { min-width: 30px; height: 30px; font-size: 19px; }
 .screen.fit.tighter .sy-rules { font-size: 17px; }
+.kk-nav .hint-btn.on { background: color-mix(in srgb, var(--listen) 22%, var(--card)); border-color: var(--listen); color: var(--ink); }
+.kk-nav .hint-btn.on::before { content: "💡 "; }
