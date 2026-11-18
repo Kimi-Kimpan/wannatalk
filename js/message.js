@@ -15,10 +15,11 @@ const T = {
     what: (n) => `${n}님에게 무엇을 쓸까요?`,
     topics: [['day', '☀️', '오늘 하루 안부 묻기'], ['weekend', '🗓️', '주말 계획 묻기'], ['dinner', '🍲', '오늘 저녁 메뉴 이야기'], ['kids', '👶', '손주·조카 안부 묻기'], ['free', '✏️', '자유롭게 쓰기']],
     preparing: '클라우디아가 글 쓸 준비를 하고 있어요…',
-    steps: { greet: '인사', body: '하고 싶은 말', close: '끝인사' },
+    steps: { greet: '인사', body: '하고 싶은 말', ask: '질문하기', close: '끝인사' },
     say: {
       greet: '먼저 인사부터 해 볼까요?<br>아래에서 고르거나, 마이크를 누르고 말씀해 주세요. <b>한국어로 말해도 영어로 바꿔 드려요.</b>',
       body: '이제 하고 싶은 말을 한 문장으로 해 볼까요?',
+      ask: '',
       close: '마지막으로 끝인사를 해요.',
     },
     pick: '이 문장 사용하기', mic: '말하기', skip: '건너뛰기', undo: '한 문장 지우기',
@@ -294,9 +295,15 @@ async function writeMessage(to, topic, replyTo) {
   const points = plan && Array.isArray(plan.points) ? plan.points.filter((x) => x && x.ko).slice(0, 3) : [];
   const lines = [];     // [{en, ko, step}]
   let si = 0;
+  // 답장에서는 레슨과 똑같이 상대에게 하나 물어보는 단계가 있어요 (영어를 배우는 사람, 내 태그에 맞는 질문들)
+  const okq = (x) => x && typeof x.en === 'string' && x.en.trim();
+  const asks = replyTo && lang() === 'ko' && plan && Array.isArray(plan.ask)
+    ? plan.ask.filter(okq).slice(0, 5).map((q) => ({ en: q.en.trim(), ko: `${q.label ? `[${String(q.label).trim()}] ` : ''}${q.ko || ''}`, plainKo: q.ko || '' })) : [];
+  const FLOW = asks.length ? ['greet', 'body', 'ask', 'close'] : STEPS;
 
   function optionsFor(step) {
     const ok = (x) => x && x.en;
+    if (step === 'ask') return asks;
     if (step === 'body' && points.length) {
       const fromPoints = points.map((p0) => (Array.isArray(p0.body) ? p0.body.find(ok) : null)).filter(Boolean);
       const rest = (plan && Array.isArray(plan.body) ? plan.body : []).filter(ok);
@@ -306,6 +313,7 @@ async function writeMessage(to, topic, replyTo) {
   }
   // 클라우디아가 하는 말 (답장일 때는 편지를 기억하고 어느 부분에 답할지 물어봐요)
   function klaudiaLine(step) {
+    if (step === 'ask') return `이번에는 ${esc(to.name || '')}님에게 궁금한 것을 하나 물어봐요. <b>뭐라고 물어볼까요?</b>`;
     if (step === 'body' && replyTo) return t.replyHint(lang() === 'ko' || writesKorean() ? points.map((x) => x.ko) : []);
     return t.say[step];
   }
@@ -336,13 +344,13 @@ async function writeMessage(to, topic, replyTo) {
     pop.querySelector('#letterClose').focus();
   }
   function frame(inner, { compact = false, noDraft = false } = {}) {
-    const step = STEPS[si];
+    const step = FLOW[si];
     mount(`<section class="screen fit compose ${compact ? 'compact' : ''}" lang="${lang()}">
       <div class="bar">
         <button class="ghost" id="quit" type="button">${t.exit}</button>
-        <div class="step-label">${si + 1}/3 · ${t.steps[step]}</div>
+        <div class="step-label">${si + 1}/${FLOW.length} · ${t.steps[step]}</div>
       </div>
-      <div class="progress" aria-hidden="true"><span style="width:${Math.round((si / 3) * 100)}%"></span></div>
+      <div class="progress" aria-hidden="true"><span style="width:${Math.round((si / FLOW.length) * 100)}%"></span></div>
       ${letterLink()}
       ${compact ? '' : `<div class="emma-row">${avatar('sm')}<div class="bubble" id="bubble"><p class="ko-line">${klaudiaLine(step)}</p></div></div>`}
       ${noDraft ? '' : `<div class="draft-box" id="draftBox">
@@ -361,7 +369,7 @@ async function writeMessage(to, topic, replyTo) {
     if (!said || !said[0] || !$('hint')) return;
     $('hint').textContent = t.converting;
     try {
-      const r = await api.ai('compose', { ...base, mode: 'voice', step, said: said[0], draft: lines.map((x) => x.en) });
+      const r = await api.ai('compose', { ...base, mode: 'voice', step: step === 'ask' ? 'body' : step, said: said[0], draft: lines.map((x) => x.en) });
       if (!r || !r.en) throw new Error('empty');
       compareScreen({ en: r.en, ko: r.ko || '', said: said[0] });
     } catch (e) {
@@ -370,7 +378,7 @@ async function writeMessage(to, topic, replyTo) {
   }
 
   function stepScreen() {
-    const step = STEPS[si];
+    const step = FLOW[si];
     const options = optionsFor(step);
     frame(`<p class="hint" id="hint" aria-live="polite">${esc(plan ? '' : t.planFail)}</p>
       <div class="sugg-list bottom" id="opts"></div>
@@ -385,7 +393,7 @@ async function writeMessage(to, topic, replyTo) {
         action: t.pick,
         soft: true,   // 마이크가 주인공으로 보이게, 예시 버튼은 차분하게
         onListen: (x) => speak(x.en, { rate: 0.85 }),
-        onPick: (x) => { lines.push({ en: x.en, ko: x.ko || '', step: si }); next(); },
+        onPick: (x) => { lines.push({ en: x.en, ko: x.plainKo != null ? x.plainKo : (x.ko || ''), step: si }); next(); },
       });
     }
     on('mic', () => speakNow(step));
@@ -393,7 +401,7 @@ async function writeMessage(to, topic, replyTo) {
 
   // 말한 뒤: 내가 한 말 ↔ 클라우디아가 고친 문장. 버튼은 화면 맨 아래에 항상 보이게.
   function compareScreen(x) {
-    const step = STEPS[si];
+    const step = FLOW[si];
     // 같은 언어로 말했으면 낱말 비교, 다른 언어로 말했으면(번역) 그대로 나란히
     const sameLang = hasHangul(x.said) === hasHangul(x.en);
     const korean = !sameLang;
@@ -420,7 +428,7 @@ async function writeMessage(to, topic, replyTo) {
   function next() {
     clearSpotlight();
     si++;
-    if (si >= STEPS.length) return review(to, lines, replyTo);
+    if (si >= FLOW.length) return review(to, lines, replyTo);
     stepScreen();
   }
   stepScreen();
