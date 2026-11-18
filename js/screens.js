@@ -13,6 +13,9 @@ register('login', () => {
   try { email = localStorage.getItem('wt-email') || ''; } catch (e) { /* 무시 */ }
 
   function landing() {
+    const learn = learnChoice();
+    const en = learn === 'ko';   // 한국어를 배우는 사람에게는 영어 화면
+    document.documentElement.lang = en ? 'en' : 'ko';
     const linkErr = window.__wtAuthErr;
     window.__wtAuthErr = '';
     mount(`<section class="screen landing">
@@ -23,25 +26,26 @@ register('login', () => {
       </div>` : ''}
       <div class="bar">
         <div class="brand">WannaTalk</div>
-        <button class="ghost" id="toAdmin" type="button">관리자</button>
+        <button class="ghost" id="toAdmin" type="button">${en ? 'Admin' : '관리자'}</button>
       </div>
       <div class="hero">
         ${avatar('lg')}
-        <h1>하루 15분,<br>클라우디아와 영어로 이야기해요</h1>
-        <p class="lead">듣고, 따라 말하고, 대답하면서 배워요.</p>
+        <h1>${en ? '15 minutes a day to learn' : '하루 15분으로 배우는'}</h1>
+        <div class="lang-switch" role="radiogroup" aria-label="${en ? 'Language to learn' : '배울 언어'}">
+          <button type="button" role="radio" id="pickEn" aria-checked="${learn === 'en'}" class="${learn === 'en' ? 'on' : ''}">${en ? 'English' : '영어'}</button>
+          <button type="button" role="radio" id="pickKo" aria-checked="${learn === 'ko'}" class="${learn === 'ko' ? 'on' : ''}">${en ? 'Korean' : '한국어'}</button>
+        </div>
       </div>
-      <ul class="feature-list">
-        <li><span aria-hidden="true">📖</span>문장 카드</li>
-        <li><span aria-hidden="true">🔤</span>낱말 10개</li>
-        <li><span aria-hidden="true">💬</span>묻고 답하기</li>
-        <li><span aria-hidden="true">🗣️</span>3분 대화</li>
-      </ul>
       <div class="spacer"></div>
-      <button class="big primary huge" id="start" type="button">레슨 시작하기 <small>로그인 · <span lang="en">Sign in</span></small></button>
-      <button class="big plain" id="pasteLogin" type="button">복사한 로그인 붙여넣기 <small>Safari에서 옮겨 온 로그인</small></button>
+      <button class="big primary huge" id="start" type="button">${en ? 'Sign in' : '로그인'}</button>
+      <button class="big plain" id="pasteLogin" type="button">${en ? 'Move sign-in' : '로그인 옮기기'}</button>
       <p class="msg" id="msg" role="alert"></p>
-      <button class="link-btn" id="toAdmin2" type="button">관리자로 로그인하기</button>
+      <button class="link-btn" id="toAdmin2" type="button">${en ? 'Admin sign-in' : '관리자로 로그인하기'}</button>
     </section>`);
+    // 배울 언어를 바꾸면 화면 언어도 바뀌어요 (한국어를 배우면 영어 화면)
+    const pick = (l) => { if (l === learn) return; setLearnChoice(l); landing(); };
+    on('pickEn', () => pick('en'));
+    on('pickKo', () => pick('ko'));
     on('pasteLogin', () => pasteLogin(false));
     on('start', () => { admin = false; stepId(); });
     on('resend', () => { admin = false; stepEmail(); });
@@ -287,6 +291,14 @@ export async function boot() {
 }
 
 // 처음 설정 ---------------------------------------------------------------------------
+// 배울 언어: 첫 화면에서 고른 것, 없으면 기기 언어로 정해요 (한국어 기기 → 영어 배우기)
+export function learnChoice() {
+  try { const v = localStorage.getItem('wt-learn'); if (v === 'en' || v === 'ko') return v; } catch (e) { /* 무시 */ }
+  const langs = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'ko']);
+  return /^ko/i.test(langs[0] || '') ? 'en' : 'ko';
+}
+function setLearnChoice(l) { try { localStorage.setItem('wt-learn', l); } catch (e) { /* 무시 */ } }
+
 register('setup', () => {
   const p = state.profile;
   // 새로 시작하는 계정: 이 기기에 남은 예전 진행 기록은 지워요
@@ -300,9 +312,11 @@ register('setup', () => {
       <p class="msg" id="msg" role="alert"></p>
     </div>
     <p class="label">무엇을 배우고 싶으세요? <span lang="en">· What do you want to learn?</span></p>
-    <div class="stack">
-      <button class="big primary" id="learner" type="button">영어를 배울래요 <small lang="en">· English</small></button>
-      <button class="big plain" id="koLearner" type="button" lang="en">I want to learn Korean <small lang="ko">· 한국어</small></button>
+    <div class="stack">${learnChoice() === 'ko'
+      ? `<button class="big primary" id="koLearner" type="button" lang="en">I want to learn Korean <small lang="ko">· 한국어</small></button>
+      <button class="big plain" id="learner" type="button">영어를 배울래요 <small lang="en">· English</small></button>`
+      : `<button class="big primary" id="learner" type="button">영어를 배울래요 <small lang="en">· English</small></button>
+      <button class="big plain" id="koLearner" type="button" lang="en">I want to learn Korean <small lang="ko">· 한국어</small></button>`}
     </div>
   </section>`);
   async function choose(role, learn = 'en') {
