@@ -888,3 +888,32 @@ body.sheet-open { overflow: hidden; }
 .screen.fit.qa .say-tip:empty { display: none; }
 .screen.fit.tight.qa .say-tip { min-height: 52px; }
 .screen.fit.tighter.qa .say-tip { display: none; }
+/* 나가기 버튼과 진행 막대 사이를 조금 띄워요 */
+.progress { margin-top: 4px; }
+.screen.fit.tight .progress { margin-top: 2px; }
+
+/* 낱말 문제: 정답을 골라도 버튼 크기·자리가 그대로 (색만 바뀌어요) */
+.later { visibility: hidden; }
+.choice .emoji { flex: 0 0 44px; width: 44px; height: 44px; font-size: 34px; line-height: 44px; text-align: center; }
+.choice.right, .choice.wrong { border-width: 2px; padding: 12px 18px; }
+.screen.fit .choice { padding-top: 8px; padding-bottom: 8px; }
+.words-q .word-actions.wide > *, .words-q .word-actions.wide > .spot, .screen.fit.words-q .word-actions.wide > .mic:not(.mid),
+.screen.fit.tight.words-q .word-actions.wide > .mic:not(.mid) { min-height: 64px !important; height: 64px; font-size: 21px !important; animation: none; }
+.screen.fit.tighter.words-q .word-actions.wide > * { min-height: 54px !important; height: 54px; font-size: 18px !important; }
+.words-q .lead { line-height: 1.4; min-height: 2.8em; }
+
+/* 대화 화면의 안내도 문장 카드처럼 흰 말풍선으로 (잘 보이게) */
+.say-tip, .say-tip.spot { background: var(--ink); color: var(--paper); border-color: var(--ink); box-shadow: 0 6px 16px rgba(0,0,0,.18); }
+.say-tip::after { background: var(--ink); border-color: var(--ink); }
+.say-tip.spot { font-weight: 700; }
+.screen.fit .say-tip, .screen.fit .say-tip.spot { font-size: 17px; line-height: 1.3; }
+.screen.fit.tighter .say-tip, .screen.fit.tighter .say-tip.spot { font-size: 15px; }
+.screen.fit.tight.qa .say-tip { min-height: 56px; }
+.letter-summary .sum-more { min-height: 50px; border-style: dashed; font-size: 18px; font-weight: 700; flex: none; }
+.letter-summary .sum-more:disabled { opacity: .45; }
+.sum-zoom svg { display: block; margin: 0 auto; }
+.sum-edit-row { display: flex; gap: 6px; margin-top: 6px; }
+.sum-edit-row .ghost { flex: 1; min-height: 46px; font-size: 16px; font-weight: 700; padding: 0 6px; }
+.sum-edit-row .primary { flex: 1.2; margin-top: 0 !important; min-height: 46px; }
+.sum-part.editing { border-color: var(--primary); }
+.screen.fit .say-tip { max-width: 100%; }

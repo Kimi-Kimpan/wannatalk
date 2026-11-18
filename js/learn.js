@@ -199,10 +199,13 @@ async function letterStep(S) {
 
   const ok = (x) => x && typeof x.en === 'string' && x.en.trim();
   const nWords = (x) => x.en.trim().split(/\s+/).length;
-  const MAX_LINES = 5; // 편지 한 통에 들어가는 문장 수 (읽는 사람도 쓰는 사람도 지치지 않게)
+  const MAX_LINES = 5; // 편지 한 통에 들어가는 줄 수 (읽는 사람도 쓰는 사람도 지치지 않게)
   let steps = [];   // [{ko, options:[{en,ko}], mode:'tiles'|'speak'}]
-  let parts = [];   // 단계마다 쓴 문장 [{items:[{en,ko}]}]
-  let backTo = false; // ＋로 들어왔으면 끝나고 요약으로
+  // 편지에 들어갈 줄들 (순서대로). n: 만든 단계 번호, 자유롭게 추가한 줄은 -1
+  let rows = [];    // [{n, item:{en,ko}|null}]
+  let backTo = false; // 요약에서 돋보기로 들어왔으면 그 줄 번호('new'면 새 줄) → 끝나면 요약으로
+  const editing = () => backTo !== false;
+  const lines = () => rows.filter((r) => r.item).map((r) => r.item);
 
   // 편지 내용에 따라 단계 수를 정해요: 앞쪽 절반은 낱말 조각, 뒤쪽 절반은 말하기
   function buildSteps() {
@@ -225,7 +228,7 @@ async function letterStep(S) {
     const asks = (plan && Array.isArray(plan.ask) ? plan.ask : []).filter(ok).slice(0, 5)
       .map((q) => ({ en: q.en.trim(), ko: `${q.label ? `[${String(q.label).trim()}] ` : ''}${q.ko || ''}`, plainKo: q.ko || '' }));
     if (asks.length) steps.push({ ko: `이번에는 ${fromName}님에게 궁금한 것을 하나 물어봐요.`, options: asks, mode: 'speak', ask: true });
-    parts = steps.map(() => ({ items: [] }));
+    rows = steps.map((x, n) => ({ n, item: null }));
   }
 
   function chips(n) {
@@ -233,7 +236,7 @@ async function letterStep(S) {
   }
   function frame(n, inner, { bubble = '', compact = false } = {}) {
     mount(`<section class="screen fit letter-reply">
-      ${header(S, 0.15 + (n / steps.length) * 0.7)}
+      ${header(S, 0.15 + ((n < 0 ? steps.length - 0.5 : n) / steps.length) * 0.7)}
       <div class="reply-steps">${chips(n)}<button class="letter-link" id="seeLetter" type="button">편지 보기 ▾</button></div>
       ${compact ? '' : `<div class="emma-row">${avatar('sm')}<div class="bubble"><p class="ko-line">${bubble}</p></div></div>`}
       ${inner}
@@ -260,15 +263,24 @@ async function letterStep(S) {
     pop.querySelector('#letterHear').addEventListener('click', (e) => speak(L.body, { rate: S.rate, button: e.currentTarget }));
   }
   const ask = (x) => `${esc(x.ko)} <b>${x.ask ? '뭐라고 물어볼까요?' : '뭐라고 답해 볼까요?'}</b>`;
+  // 한 줄을 다 만들었어요: 요약에서 들어왔으면 그 줄을 바꾸고(덧붙이지 않아요) 요약으로
   function done(n, item) {
-    if (backTo) parts[n].items.push(item); else parts[n].items = [item];
     clearSpotlight();
-    if (backTo) { backTo = false; return summary(); }
+    if (editing()) {
+      if (backTo === 'new') rows.push({ n: -1, item });
+      else if (rows[backTo]) rows[backTo].item = item;
+      backTo = false;
+      return summary();
+    }
+    const r = rows.find((x) => x.n === n);
+    if (r) r.item = item;
     return n + 1 < steps.length ? runStep(n + 1) : summary();
   }
-  function runStep(n) { return steps[n].mode === 'tiles' ? tilesPick(n) : speakStep(n); }
-  const backBtn = (n) => `<button class="round-ghost" id="prevStep" type="button">${n === 0 && !backTo ? '편지 다시 보기' : '이전 단계'}</button>`;
-  function bindBack(n) { on('prevStep', () => { if (backTo) { backTo = false; summary(); } else if (n === 0) read(); else runStep(n - 1); }); }
+  function toSummary() { backTo = false; summary(); }
+  function next(n) { return editing() ? toSummary() : n + 1 < steps.length ? runStep(n + 1) : summary(); }
+  function runStep(n) { return n < 0 ? freeStep() : steps[n].mode === 'tiles' ? tilesPick(n) : speakStep(n); }
+  const backBtn = (n) => `<button class="round-ghost" id="prevStep" type="button">${editing() ? '돌아가기' : n === 0 ? '편지 다시 보기' : '이전 단계'}</button>`;
+  function bindBack(n) { on('prevStep', () => { if (editing()) toSummary(); else if (n === 0) read(); else runStep(n - 1); }); }
 
   // 0. 편지 읽기 (번역은 준비되는 대로 나타나요)
   function read() {
@@ -306,7 +318,7 @@ async function letterStep(S) {
       if (!said || !said[0] || !$('hint')) return;
       $('hint').textContent = '영어로 바꾸고 있어요…';
       try {
-        const r = await api.ai('compose', { ...base, mode: 'voice', step: 'body', said: said[0], draft: parts.flatMap((p0) => p0.items.map((i) => i.en)) });
+        const r = await api.ai('compose', { ...base, mode: 'voice', step: 'body', said: said[0], draft: lines().map((i) => i.en) });
         if (!r || !r.en) throw new Error('empty');
         compare(n, { en: r.en, ko: r.ko || '', said: said[0] });
       } catch (e) { if ($('hint')) $('hint').textContent = '바꾸지 못했어요. 한 번 더 말씀해 주세요.'; }
@@ -323,7 +335,7 @@ async function letterStep(S) {
       <div class="compose-dock bottom">${backBtn(n)}${micBtn()}<button class="round-ghost" id="skipStep" type="button">건너뛰기</button></div>`,
       { bubble: ask(x) });
     bindBack(n);
-    on('skipStep', () => (backTo ? (backTo = false, summary()) : n + 1 < steps.length ? runStep(n + 1) : summary()));
+    on('skipStep', () => next(n));
     carousel($('opts'), x.options, {
       action: '이 문장 만들기',
       soft: true,
@@ -378,7 +390,7 @@ async function letterStep(S) {
       <div class="compose-dock bottom">${backBtn(n)}${micBtn()}<button class="round-ghost" id="skipStep" type="button">건너뛰기</button></div>`,
       { bubble: ask(x) });
     bindBack(n);
-    on('skipStep', () => (backTo ? (backTo = false, summary()) : n + 1 < steps.length ? runStep(n + 1) : summary()));
+    on('skipStep', () => next(n));
     carousel($('opts'), x.options, {
       action: x.ask ? '이 질문 쓰기' : '예시 쓰기',
       soft: true,
@@ -405,23 +417,52 @@ async function letterStep(S) {
     on('use', () => done(n, { en: x.en, ko: x.ko }));
   }
 
-  // 보내기 전에: 단계마다 나눠 보여 주고 ＋(더 붙이기) · 수정 · 삭제
-  function body() { return parts.flatMap((p0) => p0.items.map((i) => i.en.trim())).filter(Boolean).join(' '); }
-  function summary() {
+  // 자유롭게 한 줄 더 말하기 (요약의 '내용 추가하기')
+  function freeStep() {
+    mount(`<section class="screen fit letter-reply">
+      ${header(S, 0.85)}
+      <div class="reply-steps"><span class="on">＋ 내 말</span><button class="letter-link" id="seeLetter" type="button">편지 보기 ▾</button></div>
+      <div class="emma-row">${avatar('sm')}<div class="bubble"><p class="ko-line">${esc(fromName)}님에게 더 하고 싶은 말을 <b>자유롭게</b> 해 보세요.<br><small>한국어로 말해도 영어로 바꿔 드려요.</small></p></div></div>
+      <p class="hint" id="hint" aria-live="polite"></p>
+      <div class="compose-dock bottom">
+        <button class="round-ghost" id="prevStep" type="button">돌아가기</button>
+        ${micBtn()}
+        <button class="round-ghost" id="typeLine" type="button">글로 쓰기</button>
+      </div>
+    </section>`);
+    bindQuit();
+    on('seeLetter', openLetter);
+    on('prevStep', toSummary);
+    on('typeLine', () => { const at = backTo; backTo = false; if (at === 'new') { rows.push({ n: -1, item: null }); summary(rows.length - 1); } else summary(at); });
+    bindVoice(-1);
+  }
+
+  // 보내기 전에: 줄마다 🔍(다시 하기) · 수정(글 고치기, 순서 바꾸기) · 삭제, 아래에 '내용 추가하기'
+  const ZOOM = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>';
+  function rowLabel(r) {
+    if (r.n < 0) return '추가한 문장';
+    const x = steps[r.n];
+    return x.ask ? '물어본 말' : x.mode === 'tiles' ? '낱말로 만든 문장' : '말로 한 문장';
+  }
+  function body() { return lines().map((i) => i.en.trim()).filter(Boolean).join(' '); }
+  function summary(editAt = -1) {
     clearSpotlight();
+    const full = rows.length >= MAX_LINES;
     mount(`<section class="screen fit letter-summary">
       ${header(S, 0.9)}
       <h2>이렇게 보낼게요 <button class="letter-link inline" id="seeLetter" type="button">편지 보기 ▾</button></h2>
-      <div class="sum-list">${steps.map((x, i) => `<div class="sum-part">
-        <div class="sum-head"><span class="label">${i + 1}. ${x.ask ? '물어본 말' : x.mode === 'tiles' ? '낱말로 만든 문장' : '말로 한 문장'}</span>
+      <div class="sum-list">${rows.map((r, i) => `<div class="sum-part ${i === editAt ? 'editing' : ''}">
+        <div class="sum-head"><span class="label">${i + 1}. ${rowLabel(r)}</span>
           <span class="sum-btns">
-            <button class="ghost sum-add" type="button" data-i="${i}" aria-label="${i + 1}번에 더 붙이기">＋</button>
+            <button class="ghost sum-zoom" type="button" data-i="${i}" aria-label="${i + 1}번 다시 하기">${ZOOM}</button>
             <button class="ghost sum-edit" type="button" data-i="${i}">수정</button>
-            <button class="ghost sum-del" type="button" data-i="${i}" ${parts[i].items.length ? '' : 'disabled'}>삭제</button>
+            <button class="ghost sum-del" type="button" data-i="${i}">삭제</button>
           </span></div>
-        <div class="sum-text" id="sum${i}">${parts[i].items.length ? `<p lang="en">${esc(parts[i].items.map((t) => t.en).join(' '))}</p>` : '<p class="muted">비어 있어요 · ＋를 눌러 채울 수 있어요</p>'}</div>
-      </div>`).join('')}</div>
-      <p class="msg" id="msg" role="alert"></p>
+        <div class="sum-text" id="sum${i}">${r.item ? `<p lang="en">${esc(r.item.en)}</p>` : '<p class="muted">비어 있어요 · 돋보기를 눌러 채울 수 있어요</p>'}</div>
+      </div>`).join('')}
+        <button class="ghost sum-more" id="addLine" type="button" ${full ? 'disabled' : ''}>＋ 내용 추가하기</button>
+      </div>
+      <p class="msg" id="msg" role="alert">${full ? `편지는 ${MAX_LINES}문장까지예요. 더 넣으려면 하나를 지워 주세요.` : ''}</p>
       <div class="nav bottom">
         <button class="prev" id="hearAll" type="button">${ICON.sound} 전체 듣기</button>
         <button class="next" id="send" type="button">보내기</button>
@@ -430,34 +471,44 @@ async function letterStep(S) {
     bindQuit();
     on('seeLetter', openLetter);
     on('hearAll', () => say(body(), S, 'hearAll'));
-    document.querySelectorAll('.sum-add').forEach((b) => b.addEventListener('click', () => {
-      const count = parts.reduce((a, p0) => a + p0.items.length, 0);
-      if (count >= MAX_LINES) { $('msg').textContent = `편지는 ${MAX_LINES}문장까지예요. 더 넣으려면 하나를 지워 주세요.`; return; }
-      backTo = true; runStep(Number(b.dataset.i));
-    }));
-    document.querySelectorAll('.sum-del').forEach((b) => b.addEventListener('click', () => { parts[Number(b.dataset.i)].items = []; summary(); }));
-    document.querySelectorAll('.sum-edit').forEach((b) => b.addEventListener('click', () => {
+    on('addLine', () => { if (rows.length < MAX_LINES) { backTo = 'new'; freeStep(); } });
+    document.querySelectorAll('.sum-zoom').forEach((b) => b.addEventListener('click', () => {
       const i = Number(b.dataset.i);
-      const box = $(`sum${i}`);
-      box.innerHTML = `<textarea rows="2" lang="en" id="ed${i}">${esc(parts[i].items.map((t) => t.en).join(' '))}</textarea>
-        <button class="primary mid" id="ok${i}" type="button">저장</button>`;
-      $(`ed${i}`).focus();
-      on(`ok${i}`, () => {
-        const v = $(`ed${i}`).value.replace(/\s+/g, ' ').trim();
-        parts[i].items = v ? [{ en: v, ko: '' }] : [];
-        summary();
-      });
+      backTo = i;
+      runStep(rows[i].n);
     }));
+    document.querySelectorAll('.sum-del').forEach((b) => b.addEventListener('click', () => { rows.splice(Number(b.dataset.i), 1); summary(); }));
+    document.querySelectorAll('.sum-edit').forEach((b) => b.addEventListener('click', () => summary(Number(b.dataset.i))));
+    if (editAt >= 0 && rows[editAt]) {
+      // 수정: 글을 고치고, ▲▼로 순서를 바꿔요
+      const i = editAt;
+      $(`sum${i}`).innerHTML = `<textarea rows="2" lang="en" id="ed${i}" placeholder="영어로 적어 주세요">${esc(rows[i].item ? rows[i].item.en : '')}</textarea>
+        <div class="sum-edit-row">
+          <button class="ghost" id="up${i}" type="button" ${i === 0 ? 'disabled' : ''} aria-label="위로">▲ 위로</button>
+          <button class="ghost" id="down${i}" type="button" ${i === rows.length - 1 ? 'disabled' : ''} aria-label="아래로">▼ 아래로</button>
+          <button class="primary mid" id="ok${i}" type="button">저장</button>
+        </div>`;
+      const keep = () => {
+        const v = $(`ed${i}`).value.replace(/\s+/g, ' ').trim();
+        const old = rows[i].item;
+        rows[i].item = v ? { en: v, ko: old && old.en === v ? old.ko : '' } : null;
+      };
+      const move = (d) => { keep(); const j = i + d; [rows[i], rows[j]] = [rows[j], rows[i]]; summary(j); };
+      on(`up${i}`, () => move(-1));
+      on(`down${i}`, () => move(1));
+      on(`ok${i}`, () => { keep(); summary(); });
+      try { $(`sum${i}`).scrollIntoView({ block: 'nearest' }); } catch (e) { /* 무시 */ }
+    }
     on('send', async () => {
       const text = body();
-      if (!text) { $('msg').textContent = '보낼 문장이 없어요. ＋를 눌러 만들어 주세요.'; return; }
+      if (!text) { $('msg').textContent = '보낼 문장이 없어요. 돋보기나 내용 추가하기로 만들어 주세요.'; return; }
       $('send').disabled = true;
       $('msg').textContent = '보내는 중이에요…';
       try {
         await api.sendLetter({ to_id: L.from_id, body: text.slice(0, 2000), reply_to: L.id });
         await api.markAllFrom(state.user.id, L.from_id).catch(() => api.markLetter(L.id));
         S.score.letter = true;
-        save(S, { kind: 'letter', prompt_en: L.body, answer_en: text, answer_ko: parts.flatMap((p0) => p0.items.map((i) => i.ko)).filter(Boolean).join(' ') });
+        save(S, { kind: 'letter', prompt_en: L.body, answer_en: text, answer_ko: lines().map((i) => i.ko).filter(Boolean).join(' ') });
         mount(`<section class="screen center">
           <div class="big-emoji" aria-hidden="true">✉️</div>
           <h1>답장을 보냈어요!</h1>
@@ -557,10 +608,10 @@ function wordsStep(S) {
       ${part === 'read'
         ? `<div class="word-show">
              <p class="en" lang="en">${esc(q.en)}</p>
-             <p class="say" id="say" hidden>${esc(q.say || '')}</p>
+             <p class="say later" id="say">${esc(q.say || '')}&nbsp;</p>
              <div class="word-actions">
                <button class="ghost small-listen" id="play" type="button">${ICON.sound} 소리 듣기</button>
-               ${canListen ? `<button class="ghost small-listen" id="mic" type="button" hidden>${ICON.mic} 따라 말하기</button>` : ''}
+               ${canListen ? `<button class="ghost small-listen" id="mic" type="button">${ICON.mic} 따라 말하기</button>` : ''}
              </div>
            </div>`
         : `<div class="word-actions wide">
@@ -583,13 +634,13 @@ function wordsStep(S) {
         if (o.en === q.en) { x.classList.add('right'); x.querySelector('.emoji').textContent = o.emoji || ''; }
         else if (Number(x.dataset.j) === st.picked) x.classList.add('wrong');
       });
-      if ($('mic')) $('mic').hidden = false;
-      if ($('say') && q.say) $('say').hidden = false;
+      if ($('mic')) { $('mic').hidden = false; $('mic').classList.remove('later'); }
+      if ($('say') && q.say) $('say').classList.remove('later');
       $('hint').innerHTML = right ? `맞았어요! 👏 <b lang="en">${esc(q.en)}</b> = ${esc(q.ko)}` : `정답은 "<b>${esc(q.ko)}</b>"이에요. <span lang="en">${esc(q.en)}</span>`;
       $('qnext').disabled = false;
       if (fresh) {
         if (right) celebrate($('hint'));
-        say(q.en, S);
+        if (part === 'listen') say(q.en, S);   // 읽기 문제는 낱말이 나올 때 이미 읽어 줬어요
       }
       spotlight($('qnext'), $('hint'), document.querySelector('.word-actions'), document.querySelector('.choices'));
     }
@@ -608,7 +659,7 @@ function wordsStep(S) {
       showResult(true);
     }));
     if (st.picked != null) showResult(false);
-    else if (part === 'listen') setTimeout(() => { if ($('play')) say(q.en, S); }, 300);
+    else setTimeout(() => { if ($('play')) say(q.en, S); }, 300);   // 새 낱말이 나오면 클라우디아가 바로 읽어 줘요
   }
 
   question('read', k);
