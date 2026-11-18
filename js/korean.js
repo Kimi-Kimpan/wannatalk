@@ -4,6 +4,20 @@ import { state, register, go, mount, on, $, esc, ICON, phoneGuide, bindPhoneGuid
 import { speak } from './speech.js';
 import { letterBody, bindLetterToggles, readable } from './message.js';
 import * as api from './api.js';
+import { keysDone, KEY_UNITS } from './kokeys.js';
+
+// 한글 키보드 과정: 하루 한 단원, 마친 단원은 다시 할 수 있어요
+function keysCard() {
+  const n = keysDone(), total = KEY_UNITS.length, all = n >= total;
+  const cur = KEY_UNITS[Math.min(n, total - 1)];
+  return `<div class="panel keys-card">
+    <p class="label">⌨️ Hangul keyboard · ${Math.min(n, total)} of ${total} units done</p>
+    <h2>${all ? 'Course complete!' : `Unit ${n + 1}: <span lang="ko">${esc(cur.title)}</span>`}</h2>
+    <div class="unit-dots">${KEY_UNITS.map((x, i) => `<button class="unit-dot ${i < n ? 'done' : i === n ? 'now' : ''}" type="button" data-u="${i}" ${i > n ? 'disabled' : ''} aria-label="Unit ${i + 1}">${i + 1}</button>`).join('')}</div>
+    <button class="big primary" id="keysGo" type="button">${all ? 'Practice again' : n ? 'Continue' : 'Start learning Hangul'}</button>
+    <p class="muted">${all ? 'Daily Korean lessons with Klaudia are coming next.' : 'About 10 minutes a unit. Type on the screen keyboard, or on your computer keyboard.'}</p>
+  </div>`;
+}
 
 register('ko-home', async () => {
   const p = state.profile;
@@ -14,15 +28,13 @@ register('ko-home', async () => {
     </div>
     <h1 lang="ko">안녕하세요, ${esc(p.name || '')}!</h1>
     <p class="sub">Hello! You are learning Korean with Klaudia.</p>
+    ${keysCard()}
     <div class="panel msg-card" id="msgCard"><p class="muted">Loading your messages…</p></div>
     ${phoneGuide('en')}
-    <div class="panel">
-      <h2>Korean lessons</h2>
-      <p class="muted">Coming soon: learn Hangul by typing on the keyboard, then short daily lessons with Klaudia.
-      For now, write to your family in Korean. Klaudia helps with every line and fixes only real mistakes.</p>
-    </div>
   </section>`);
   on('settings', () => go('ko-settings'));
+  document.querySelectorAll('.unit-dot').forEach((b) => b.addEventListener('click', () => go('ko-keys', { unit: Number(b.dataset.u) })));
+  on('keysGo', () => go('ko-keys', { unit: Math.min(keysDone(), KEY_UNITS.length - 1) }));
   bindPhoneGuide('ko-settings');
 
   try {

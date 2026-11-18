@@ -5,6 +5,7 @@ import { boot } from './screens.js';
 import './placement.js';
 import './about.js';
 import './korean.js';
+import './kokeys.js';
 import './learn.js';
 import './friend.js';
 import './message.js';
