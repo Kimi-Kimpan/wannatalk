@@ -224,6 +224,9 @@ export async function addNotes(facts, topic) {
   await sb.from('story_notes').insert(rows);
 }
 
+// 한국어 레슨은 같은 표에 day = KO_DAY0 + 번호로 저장해요
+export const KO_DAY0 = 1000;
+
 // 하루 패키지 ---------------------------------------------------------------------
 export async function getPack(day) {
   const { data, error } = await sb.from('daily_packs').select('*').eq('user_id', await myId()).eq('day', day).maybeSingle();
@@ -232,7 +235,7 @@ export async function getPack(day) {
 }
 // 마친 레슨 목록 (최근 것부터)
 export async function donePacks(limit = 12) {
-  const { data, error } = await sb.from('daily_packs').select('day,topic,done_at').eq('user_id', await myId()).not('done_at', 'is', null).order('day', { ascending: false }).limit(limit);
+  const { data, error } = await sb.from('daily_packs').select('day,topic,done_at').eq('user_id', await myId()).lt('day', KO_DAY0).not('done_at', 'is', null).order('day', { ascending: false }).limit(limit);
   if (error) throw error;
   return data || [];
 }

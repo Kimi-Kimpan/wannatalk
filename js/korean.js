@@ -1,11 +1,26 @@
 // 한국어를 배우는 사람의 화면 (영어 화면). 지금은 편지 주고받기 + 휴대폰 설치 안내 + 설정.
 // 한글 키보드 레슨과 하루 레슨은 다음 단계에서 이 화면에 붙어요.
-import { state, register, go, mount, on, $, esc, ICON, phoneGuide, bindPhoneGuide } from './ui.js';
+import { state, register, go, mount, on, $, esc, ICON, phoneGuide, bindPhoneGuide, today } from './ui.js';
 import { speak } from './speech.js';
 import { letterBody, bindLetterToggles, readable } from './message.js';
 import * as api from './api.js';
 import { keysDone, KEY_UNITS } from './kokeys.js';
 import { boot } from './screens.js';
+import { prepareKoDay } from './kolearn.js';
+
+// 한국어 하루 레슨 카드
+function lessonCard(p) {
+  const n = p.ko_day || 1;
+  const doneToday = p.ko_last_done === today();
+  let resume = false;
+  try { const sv = JSON.parse(localStorage.getItem('wt-ko-progress') || 'null'); resume = !!(sv && sv.n === n && (sv.i > 0 || sv.sub > 0)); } catch (e) { /* 무시 */ }
+  return `<div class="panel lesson-card">
+    <p class="label">📚 Korean lessons · Day ${n}</p>
+    <h2>${doneToday ? 'Today’s lesson is done ✓' : 'Today’s lesson'}</h2>
+    <p class="muted">Sentences · Words · Q&amp;A with Klaudia · about 15 minutes</p>
+    <button class="big ${doneToday ? 'plain' : 'primary'}" id="lessonGo" type="button">${!p.ko_level ? 'Start your first lesson' : resume ? 'Continue' : doneToday ? 'Do the next lesson' : 'Start'}</button>
+  </div>`;
+}
 
 // 한글 키보드 과정: 하루 한 단원, 마친 단원은 다시 할 수 있어요
 function keysCard() {
@@ -16,7 +31,7 @@ function keysCard() {
     <h2>${all ? 'Course complete!' : `Unit ${n + 1}: <span lang="ko">${esc(cur.title)}</span>`}</h2>
     <div class="unit-dots">${KEY_UNITS.map((x, i) => `<button class="unit-dot ${i < n ? 'done' : i === n ? 'now' : ''}" type="button" data-u="${i}" ${i > n ? 'disabled' : ''} aria-label="Unit ${i + 1}">${i + 1}</button>`).join('')}</div>
     <button class="big primary" id="keysGo" type="button">${all ? 'Practice again' : n ? 'Continue' : 'Start learning Hangul'}</button>
-    <p class="muted">${all ? 'Daily Korean lessons with Klaudia are coming next.' : 'About 10 minutes a unit. Type on the screen keyboard, or on your computer keyboard.'}</p>
+    <p class="muted">${all ? 'Keep going with the daily lessons with Klaudia.' : 'About 10 minutes a unit. Type on the screen keyboard, or on your computer keyboard.'}</p>
   </div>`;
 }
 
@@ -29,11 +44,13 @@ register('ko-home', async () => {
     </div>
     <h1 lang="ko">안녕하세요, ${esc(p.name || '')}!</h1>
     <p class="sub">Hello! You are learning Korean with Klaudia.</p>
-    ${keysCard()}
+    ${keysDone() < 3 ? keysCard() + lessonCard(p) : lessonCard(p) + keysCard()}
     <div class="panel msg-card" id="msgCard"><p class="muted">Loading your messages…</p></div>
     ${phoneGuide('en')}
   </section>`);
   on('settings', () => go('ko-settings'));
+  on('lessonGo', () => go('ko-day'));
+  prepareKoDay();
   document.querySelectorAll('.unit-dot').forEach((b) => b.addEventListener('click', () => go('ko-keys', { unit: Number(b.dataset.u) })));
   on('keysGo', () => go('ko-keys', { unit: Math.min(keysDone(), KEY_UNITS.length - 1) }));
   bindPhoneGuide('ko-settings');
@@ -107,11 +124,27 @@ register('ko-settings', async () => {
     </div>
     <div id="adminBox"></div>
     <div class="panel">
+      <h2>Korean level</h2>
+      <p class="muted">Changes the next new lesson.</p>
+      <div class="lang-switch ko-levels" role="radiogroup" aria-label="Korean level">
+        ${[1, 2, 3].map((l) => `<button type="button" role="radio" data-l="${l}" aria-checked="${(p.ko_level || 1) === l}" class="${(p.ko_level || 1) === l ? 'on' : ''}">${['Starter', 'Beginner', 'Elementary'][l - 1]}</button>`).join('')}
+      </div>
+      <p class="msg" id="lvMsg" role="status"></p>
+    </div>
+    <div class="panel">
       <p class="muted">Learning: <b>Korean</b></p>
       <button class="big plain" id="logout" type="button">Sign out</button>
     </div>
   </section>`);
   on('back', () => go('ko-home'));
+  document.querySelectorAll('.ko-levels button').forEach((b) => b.addEventListener('click', async () => {
+    const l = Number(b.dataset.l);
+    try {
+      state.profile = await api.updateProfile(state.user.id, { ko_level: l });
+      document.querySelectorAll('.ko-levels button').forEach((x) => { const on1 = Number(x.dataset.l) === l; x.classList.toggle('on', on1); x.setAttribute('aria-checked', String(on1)); });
+      $('lvMsg').textContent = 'Saved.';
+    } catch (e) { $('lvMsg').textContent = 'Could not save. Please try again.'; }
+  }));
   // 관리자: 대시보드, 영어 학습 프로그램으로 전환
   api.isAdmin().then((yes) => {
     if (!yes || !$('adminBox')) return;

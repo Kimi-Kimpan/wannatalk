@@ -39,9 +39,17 @@ const LEARNER_BASE =
   "The learner is a Korean adult learning English conversation, reads Korean comfortably, and uses a phone. " +
   "Be warm, patient and respectful. Never be childish. " +
   "(The instructions below say 'he/him' for the learner; follow the background for who the person really is.)";
+// 한국어를 배우는 사람 (영어가 편한 사람)
+const KO_LEARNER_BASE =
+  "The learner is an English-speaking adult learning Korean, a beginner. Explain in simple English. Be warm, patient and respectful. Never be childish.";
 function learnerOf(b: any): string {
   const bg = b && b._bg;
-  if (!bg) return LEARNER_BASE;                       // 배경이 필요 없는 일(편지 읽기 등)에는 붙이지 않아요
+  if (!bg) return LEARNER_BASE;
+  if (bg.learn === "ko") {
+    const t = Array.isArray(bg.tags) ? bg.tags.map((x: any) => clip(x, 40)).filter(Boolean).slice(0, 10) : [];
+    const n = clip(bg.note, 300);
+    return `${KO_LEARNER_BASE} ${t.length || n ? `This learner's background (fit subjects and examples to it): ${t.join("; ")}${t.length && n ? ". " : ""}${n}` : "Nothing is known about this learner: assume nothing."}`;
+  }                       // 배경이 필요 없는 일(편지 읽기 등)에는 붙이지 않아요
   const tags = Array.isArray(bg.tags) ? bg.tags.map((t: any) => clip(t, 40)).filter(Boolean).slice(0, 10) : [];
   const note = clip(bg.note, 300);
   if (!tags.length && !note) {
@@ -589,7 +597,7 @@ async function transcribe(b: any, m?: Meter) {
   const mime = /^audio\/[a-z0-9.+-]+$/i.test(String(b.mime || "")) ? String(b.mime) : "audio/wav";
   const ext = /wav/.test(mime) ? "wav" : /mp4|m4a|aac/.test(mime) ? "m4a" : /webm/.test(mime) ? "webm" : "wav";
   // 메시지 쓰기에서는 한국어로 말해도 되게 언어를 정하지 않습니다.
-  const lang = b.lang === "auto" ? "" : "en";
+  const lang = b.lang === "auto" ? "" : b.lang === "ko" ? "ko" : "en";
   const secs = ext === "wav" ? Math.max(0, (bytes.length - 44) / 32000) : bytes.length / 16000;
 
   const key = Deno.env.get("OPENAI_API_KEY");
@@ -625,7 +633,8 @@ async function transcribe(b: any, m?: Meter) {
       const res = await callGemini(model, gkey, {
         contents: [{ role: "user", parts: [
           { inlineData: { mimeType: mime, data: b64 } },
-          { text: lang ? "Write down exactly the English words spoken in this audio. Reply with the words only. If nothing is said, reply with nothing."
+          { text: lang === "ko" ? "Write down exactly the Korean words spoken in this audio, in Hangul. The speaker is a beginner learner of Korean. Reply with the words only. If nothing is said, reply with nothing."
+                 : lang ? "Write down exactly the English words spoken in this audio. Reply with the words only. If nothing is said, reply with nothing."
                        : "Write down exactly the words spoken in this audio (it may be Korean or English), in the language spoken. Reply with the words only. If nothing is said, reply with nothing." },
         ] }],
         generationConfig: { temperature: 0, maxOutputTokens: 200 },
@@ -753,6 +762,89 @@ Return JSON:
   return await gemini(system, prompt, 0.8, b.reply_to ? 2800 : 1200, m);
 }
 
+// ---------------------------------------------------------------------------
+// 한국어 하루 레슨 (영어가 편한 사람이 한국어를 배워요). 말투는 모두 해요체.
+const KO_LEVELS: Record<number, string> = {
+  1: "Korean level 1 (just learned Hangul): 1 to 4 words per sentence, present tense, the most common everyday words, polite 해요체 (e.g. '저는 클라라예요.', '커피 좋아해요.').",
+  2: "Korean level 2 (beginner): one short sentence of 3 to 6 words, present and simple past (-었어요), 해요체.",
+  3: "Korean level 3 (elementary): one natural sentence that may join two ideas (-고, -어서, -지만), past and future (-ㄹ 거예요), 해요체.",
+};
+const KO_TOPICS: Record<string, string> = {
+  me: "Introducing yourself: name, where you live, what you do.",
+  family: "Family: who is in your family, how they are, family in Korea.",
+  food: "Food and drinks: what you like to eat and drink, Korean food.",
+  day: "Your day: getting up, work, evening, what you did today.",
+  weather: "Weather and seasons where you live (snow, cold, summer light) and in Korea.",
+  likes: "Things you like: hobbies, music, walks, weekends.",
+  home: "Home and town: your house, your town, places nearby.",
+  korea: "Korea and travel: visiting Korea, places to see, meeting family.",
+  feelings: "Feelings: happy, tired, busy, missing someone, thanks.",
+  plans: "Plans: this weekend, next month, things you want to do.",
+};
+const KO_TOPIC_ORDER = ["me", "family", "food", "day", "weather", "likes", "home", "korea", "feelings", "plans"];
+const ROMAN_RULE = "'roman' is the Revised Romanization of the Korean, split by syllable groups as spoken (e.g. '감사합니다' -> 'gam-sa-ham-ni-da').";
+
+async function makeKoPack(b: any, m?: Meter) {
+  const level = Math.min(3, Math.max(1, Number(b.level) || 1));
+  const day = Math.max(1, Number(b.day) || 1);
+  const topic = KO_TOPIC_ORDER[(day - 1) % KO_TOPIC_ORDER.length];
+  const cycle = Math.floor((day - 1) / KO_TOPIC_ORDER.length) + 1;
+  const system = `You are Klaudia, a friendly Korean conversation teacher. ${learnerOf(b)} Reply with JSON only.`;
+  const prompt = `Create today's Korean lesson.
+
+Topic: ${KO_TOPICS[topic]}
+Cycle: ${cycle} (a later cycle on the same topic goes a little deeper with new sentences)
+${KO_LEVELS[level]}
+Learner's name: ${clip(b.name, 40) || "the learner"}
+
+What we already know about the learner:
+${notesText(b.notes)}
+
+Return JSON with exactly this shape:
+{
+  "title_en": "short English title for today's lesson (max 24 characters)",
+  "cards": [ {"ko": "...", "en": "...", "roman": "..."} ],              // 6 useful Korean sentences the learner can say about this topic: 4 or 5 first-person statements, then 1 or 2 QUESTIONS to ask another person
+  "words": [ {"ko": "...", "en": "...", "roman": "...", "emoji": "one emoji"} ], // 10 single words (nouns, verbs in 해요 form, adjectives) for this topic, all different meanings
+  "questions": [                                                          // 4 questions Klaudia asks the learner in Korean, from easy to slightly deeper
+    {"ko": "...", "en": "...", "choices": [ {"ko": "...", "en": "..."}, {"ko": "...", "en": "..."}, {"ko": "...", "en": "..."} ]}
+  ]
+}
+Rules:
+- ${ROMAN_RULE}
+- Every Korean sentence fits the level and uses the polite 해요체. "en" is a natural English meaning.
+- Use only words a beginner can read; avoid rare Sino-Korean words.
+- choices are 3 different short Korean answers the learner could give, each fitting the level.
+- Questions are about the learner's own life, so the answers are personal.`;
+  const out = await gemini(system, prompt, 0.8, 4096, m, 35000);
+  if (out && typeof out === "object") { out.topic = topic; out.level = level; }
+  return out;
+}
+
+async function checkKo(b: any, m?: Meter) {
+  const level = Math.min(3, Math.max(1, Number(b.level) || 1));
+  const last = !!b.last;
+  const history = (Array.isArray(b.history) ? b.history.slice(-4) : [])
+    .map((x: any) => `Klaudia: ${clip(x && x.q, 200)}\nLearner: ${clip(x && x.a, 200)}`).join("\n");
+  const system = `You are Klaudia, a kind Korean teacher having a short spoken conversation in Korean. ${learnerOf(b)} Reply with JSON only.`;
+  const prompt = `${history ? `Conversation so far:\n${history}\n\n` : ""}Klaudia asked in Korean: "${clip(b.question, 300)}"
+The learner answered (speech recognition, typing or a tapped example; may be Korean, English or a mix, and may have errors): "${clip(b.answer, 300)}"
+${b.tapped ? "The learner tapped a suggested answer, so it is already correct: good is true, better_ko repeats it, tip_en is empty." : ""}
+${KO_LEVELS[level]}
+${last ? "This is the LAST question of today's lesson." : ""}
+Return JSON:
+{
+  "good": true or false,        // true if a Korean listener would understand the meaning, even with small mistakes. If the answer is in English, good is false.
+  "reply_ko": "Klaudia's short warm reaction in Korean at the learner's level (max 8 words)${last ? ", then a short goodbye" : ""}. No question.",
+  "reply_en": "English meaning of reply_ko",
+  "better_ko": "a natural, correct Korean version of what the learner meant, at their level (keep their own words where they are right)",
+  "better_en": "English meaning",
+  "better_roman": "Revised Romanization of better_ko",
+  "tip_en": "one short English tip about a particle, ending or word, or empty string",
+  "facts": ["short English facts about the learner's life learned from this answer. Empty if none."]
+}`;
+  return await gemini(system, prompt, 0.4, 1500, m);
+}
+
 // 사용량 적기 (실패해도 앱에는 영향 없음)
 async function saveUsage(url: string, key: string, token: string, action: string, meter: Meter) {
   if (!meter.length) return;
@@ -863,12 +955,12 @@ Deno.serve(async (req) => {
   // 이 사용자의 배경은 서버가 직접 읽어 옵니다 (앱에서 보낸 값은 쓰지 않아요)
   delete b._bg;
   let gone = false;
-  if (b && ["pack", "check", "chat", "compose"].includes(b.action)) {   // 주제를 고르는 일에만 읽어 와요
+  if (b && ["pack", "check", "chat", "compose", "kopack", "kocheck"].includes(b.action)) {   // 주제를 고르는 일에만 읽어 와요
     try {
       const db = createClient(url, key, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${token}` } } });
       const { data } = await db.from("profiles").select("*").eq("id", user.id).maybeSingle();
       if (data && data.deleted_at) gone = true;          // 관리자가 삭제한 계정
-      if (data) b._bg = { tags: data.background_tags || [], note: data.background_note || "" };
+      if (data) b._bg = { tags: data.background_tags || [], note: data.background_note || "", learn: data.learn_lang || "en" };
     } catch { /* 배경 없이 진행 */ }
   }
 
@@ -876,7 +968,7 @@ Deno.serve(async (req) => {
   const meter: Meter = [];
   const handlers: Record<string, (b: any, m: Meter) => Promise<any>> = {
     pack: makePack, check: checkAnswer, chat: chatTurn, letter: readLetter, polish: polishReply, translate: translateLetter,
-    tts: speech, stt: transcribe, compose,
+    tts: speech, stt: transcribe, compose, kopack: makeKoPack, kocheck: checkKo,
   };
   try {
     if (b?.action === "ping") return json({ ok: true });

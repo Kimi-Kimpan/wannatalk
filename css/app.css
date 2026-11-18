@@ -1033,3 +1033,17 @@ body.sheet-open { overflow: hidden; }
 .kk-intro .kk-letters { margin: 6px 0 10px; }
 .kk-howto { margin-top: 10px; font-size: 17px; }
 .screen.fit.tighter .kk-intro { padding-bottom: 4vh; }
+
+/* 한국어 하루 레슨 */
+.ko-lesson .ko-big { font-size: 30px; line-height: 1.35; font-weight: 800; word-break: keep-all; }
+.ko-lesson .sentence .en { font-size: 19px; color: var(--ink-soft); }
+.ko-lesson .say.later { visibility: hidden; }
+.ko-lesson .feedback .better { color: var(--good, #4CC38A); font-weight: 700; }
+.ko-lesson .feedback .tip { font-size: 16px; margin: 6px 0 0; }
+.ko-lesson .typed { display: flex; gap: 8px; margin-top: 8px; }
+.ko-lesson .typed input { flex: 1; min-width: 0; }
+.level-pick .level-btn { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 4px; }
+.level-pick .level-btn small { font-size: 15px; color: var(--ink-soft); font-weight: 500; }
+.lesson-card h2 { margin: 2px 0 4px; }
+.ko-levels button { flex: 1; }
+.ko-lesson .say::before { content: "Say  "; font-size: 15px; }

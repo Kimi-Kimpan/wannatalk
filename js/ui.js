@@ -74,12 +74,12 @@ export function loading(text) {
     <p class="lead">${esc(text)}</p>
   </section>`);
 }
-export function errorScreen(text, retry, back) {
-  mount(`<section class="screen center">
+export function errorScreen(text, retry, back, en = false) {
+  mount(`<section class="screen center" ${en ? 'lang="en"' : ''}>
     <p class="lead">${esc(text)}</p>
     <div class="stack">
-      ${retry ? '<button class="big primary" id="retry" type="button">다시 해 보기</button>' : ''}
-      <button class="big plain" id="back" type="button">처음으로</button>
+      ${retry ? `<button class="big primary" id="retry" type="button">${en ? 'Try again' : '다시 해 보기'}</button>` : ''}
+      <button class="big plain" id="back" type="button">${en ? 'Back home' : '처음으로'}</button>
     </div>
   </section>`);
   if (retry) on('retry', retry);
@@ -193,9 +193,9 @@ export function spotlight(...els) {
 function micLabel(btn, icon, text) {
   btn.innerHTML = btn.classList.contains('mic-round') ? `${icon}<span>${text}</span>` : `${icon} ${text}`;
 }
-function micOn(btn) {
+function micOn(btn, en = false) {
   if (btn.dataset.label == null) btn.dataset.label = btn.innerHTML;
-  micLabel(btn, ICON.stop, '정지');
+  micLabel(btn, ICON.stop, en ? 'Stop' : '정지');
   btn.classList.add('recording');
 }
 function micOff(btn) {
@@ -205,12 +205,14 @@ function micOff(btn) {
 }
 // 마이크로 한 번 듣기. 알아들은 문장 후보를 돌려주고, 못 들었으면 null (이유는 hintEl 에 적음).
 // 듣는 중에 같은 버튼을 다시 누르면 거기까지 들은 말로 진행합니다.
-export async function hear(mic, hintEl, { listening = '듣고 있어요… 말씀하세요', ...opts } = {}) {
+const LISTEN_EN = { 'not-allowed': 'Please allow the microphone, then tap again.', 'service-not-allowed': 'Please allow the microphone.', 'no-speech': 'I did not hear you. Tap and speak a little louder.', 'audio-capture': 'The microphone is busy. Is another app using it?', network: 'Please check your internet.', 'stt-failed': 'I could not understand. Tap and try once more.' };
+export async function hear(mic, hintEl, { listening = '듣고 있어요… 말씀하세요', ui = 'ko', ...opts } = {}) {
+  const en = ui === 'en';
   if (!mic) return null;
   if (mic.classList.contains('recording')) { stopListening(); return null; }
   if (mic.classList.contains('thinking')) return null;
   const say = (t) => { if (hintEl && hintEl.isConnected) hintEl.textContent = t; };
-  micOn(mic);
+  micOn(mic, en);
   say(listening);
   // 말하는 동안과 알아듣는 동안에는 '다음'을 누를 수 없어요 (결과가 나오면 다시 켜져요)
   const held = [...document.querySelectorAll('#app .nav .next')].filter((b) => !b.disabled);
@@ -223,12 +225,12 @@ export async function hear(mic, hintEl, { listening = '듣고 있어요… 말�
         if (s !== 'thinking') return;
         mic.classList.remove('recording');
         mic.classList.add('thinking');
-        micLabel(mic, ICON.mic, '알아듣는 중…');
-        say('알아듣고 있어요…');
+        micLabel(mic, ICON.mic, en ? 'Thinking…' : '알아듣는 중…');
+        say(en ? 'Understanding…' : '알아듣고 있어요…');
       },
     });
   } catch (err) {
-    if (err !== 'aborted') say(LISTEN_ERRORS[err] || '다시 눌러 주세요.');
+    if (err !== 'aborted') say(en ? (LISTEN_EN[err] || 'Please tap again.') : (LISTEN_ERRORS[err] || '다시 눌러 주세요.'));
     return null;
   } finally {
     micOff(mic);

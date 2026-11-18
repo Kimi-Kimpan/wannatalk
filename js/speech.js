@@ -461,7 +461,7 @@ function listenWebSpeech({ silenceMs = 1800, maxMs = 25000, lang = 'en' } = {}) 
     let finals = [], lastAlts = [], interim = '';
     let silence = null;
     const r = new SR();
-    r.lang = lang === 'auto' ? 'ko-KR' : 'en-US';
+    r.lang = lang === 'auto' || lang === 'ko' ? 'ko-KR' : 'en-US';
     r.interimResults = true;
     r.continuous = false;
     r.maxAlternatives = 3;
