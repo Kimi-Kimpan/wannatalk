@@ -6,6 +6,8 @@ import * as api from './api.js';
 import { ROWS, QWERTY, SHIFTED, BASE_OF, compose, keysFor, nextKey, parts, SOUND, sayable, UNITS, isVowel } from './hangul.js';
 // 자음은 주황, 모음은 파랑 (키보드·글자 칩·조립 칸 모두 같은 색)
 const cv = (j) => (isVowel(j) ? 'v' : 'c');
+// 글쇠 아래에 적는 짧은 소리 (ㅇ은 끝소리일 때의 ng)
+const roman = (j) => (j === 'ㅇ' ? 'ng' : (SOUND[j] ? SOUND[j][0].replace(/ /g, '') : ''));
 
 // 지금까지 마친 단원 수 (서버에 저장, 안 되면 이 기기에)
 export function keysDone() {
@@ -22,7 +24,7 @@ export const KEY_UNITS = UNITS;
 
 // 화면 키보드 (두벌식). 컴퓨터 자판으로 쳐도 같아요.
 function keyboardHtml() {
-  const key = ([k, a, b]) => `<button class="kb-key kb-${cv(a)}" type="button" data-k="${a}" ${b ? `data-s="${b}"` : ''} aria-label="${a}"><span class="kb-j">${a}</span><small>${k}</small></button>`;
+  const key = ([k, a, b]) => `<button class="kb-key kb-${cv(a)}" type="button" data-k="${a}" ${b ? `data-s="${b}"` : ''} aria-label="${a}"><span class="kb-j">${a}</span><small lang="en">${roman(a)}</small></button>`;
   return `<div class="kb" id="kb" lang="ko">
     <div class="kb-row">${ROWS[0].map(key).join('')}</div>
     <div class="kb-row r2">${ROWS[1].map(key).join('')}</div>
@@ -33,7 +35,7 @@ function bindKeyboard(onKey) {
   let shift = false;
   const paint = () => {
     $('kbShift').classList.toggle('on', shift);
-    document.querySelectorAll('.kb-key[data-s]').forEach((b) => { b.querySelector('.kb-j').textContent = shift ? b.dataset.s : b.dataset.k; });
+    document.querySelectorAll('.kb-key[data-s]').forEach((b) => { const j = shift ? b.dataset.s : b.dataset.k; b.querySelector('.kb-j').textContent = j; b.querySelector('small').textContent = roman(j); });
   };
   const press = (j) => { onKey(j); if (shift) { shift = false; paint(); } };
   document.querySelectorAll('.kb-key[data-k]').forEach((b) => b.addEventListener('click', () => press(shift && b.dataset.s ? b.dataset.s : b.dataset.k)));
