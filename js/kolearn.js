@@ -5,6 +5,14 @@ import { speak, prefetch, canListen } from './speech.js';
 import * as api from './api.js';
 import { romanOn, romanLine, romanSwitch, bindRoman } from './kokeys.js';
 
+const STEP_NAMES = { cards: 'Sentences', words: 'Words', qa: 'Q & A' };
+const RATE = { 1: 0.7, 2: 0.8, 3: 0.9 };
+const LEVEL_TEXT = {
+  1: ['I just learned Hangul', 'Very short sentences.'],
+  2: ['I know a little Korean', 'Short everyday sentences.'],
+  3: ['I can have simple chats', 'Longer sentences that join two ideas.'],
+};
+
 // 한글만 남겨서 글자 단위로 비교해요 (따라 말하기 점수)
 function koSimilarity(target, heard) {
   const t = [...String(target || '').replace(/[^가-힣]/g, '')];
@@ -112,7 +120,12 @@ register('ko-day', async (opts = {}) => {
   if (S.c.cards[0]) prefetch(S.c.cards[0].ko);
   const saved = readProgress();
   if (saved && saved.n === n && (saved.i > 0 || saved.sub > 0)) { S.i = Math.min(saved.i, 2); S.resume = saved.sub || 0; if (saved.score) S.score = saved.score; }
-  runStep(S);
+  try { runStep(S); }
+  catch (e) {
+    console.error(e);
+    clearProgress();
+    errorScreen('Something went wrong opening the lesson. Please try again.', () => go('ko-day', opts), () => go('ko-home'), true);
+  }
 });
 
 function runStep(S) {
