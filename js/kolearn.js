@@ -3,11 +3,39 @@
 import { state, register, go, mount, on, $, esc, topBar, shuffle, today, loading, errorScreen, avatar, ICON, hear, celebrate, carousel, spotlight, clearSpotlight } from './ui.js';
 import { speak, prefetch, canListen } from './speech.js';
 import * as api from './api.js';
+import { keysDone } from './kokeys.js';
+
+// 로마자: 켜면 보이고, 끄면 흐리게 가려서 눌러야 보여요.
+// 처음에는 한글 키보드 과정 5단원(기본 자음·모음)을 마치기 전이면 켜짐, 마친 뒤면 꺼짐. 스위치로 바꾸면 그대로 기억해요.
+const RKEY = 'wt-ko-roman';
+function romanOn() {
+  try { const v = localStorage.getItem(RKEY); if (v === 'on' || v === 'off') return v === 'on'; } catch (e) { /* 무시 */ }
+  return keysDone() < 5;
+}
+function setRomanOn(v) { try { localStorage.setItem(RKEY, v ? 'on' : 'off'); } catch (e) { /* 무시 */ } }
+const romanLine = (text, id = '') => `<p class="say roman-line ${romanOn() ? '' : 'blur'}" ${id ? `id="${id}"` : ''} role="button" tabindex="0" aria-label="Romanization">${esc(text)}</p>`;
+const romanSwitch = () => `<button class="roman-switch" id="romanSw" type="button" role="switch" aria-checked="${romanOn()}"><span class="track"><span class="knob"></span></span>Romanization ${romanOn() ? 'on' : 'off'}</button>`;
+// 흐린 줄은 누르면 그 줄만 보여요. 스위치는 화면의 모든 줄에 바로 적용돼요.
+function bindRoman() {
+  document.querySelectorAll('.roman-line').forEach((el) => {
+    const show = () => el.classList.remove('blur');
+    el.addEventListener('click', show);
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') show(); });
+  });
+  const sw = $('romanSw');
+  if (sw) sw.addEventListener('click', () => {
+    const v = !romanOn();
+    setRomanOn(v);
+    sw.setAttribute('aria-checked', String(v));
+    sw.lastChild.textContent = `Romanization ${v ? 'on' : 'off'}`;
+    document.querySelectorAll('.roman-line').forEach((el) => el.classList.toggle('blur', !v));
+  });
+}
 
 const STEP_NAMES = { cards: 'Sentences', words: 'Words', qa: 'Q & A' };
 const RATE = { 1: 0.7, 2: 0.8, 3: 0.9 };
 const LEVEL_TEXT = {
-  1: ['I just learned Hangul', 'Very short sentences, romanization always shown.'],
+  1: ['I just learned Hangul', 'Very short sentences.'],
   2: ['I know a little Korean', 'Short everyday sentences.'],
   3: ['I can have simple chats', 'Longer sentences that join two ideas.'],
 };
@@ -136,7 +164,6 @@ function header(S, part = 0) {
 }
 function bindQuit(S) { on('quit', () => { saveProgress(S); go('ko-home'); }); }
 const say = (text, S, btn = 'play', slowly = false) => speak(text, { rate: slowly ? 0.55 : S.rate, button: $(btn), restart: slowly });
-const romanFirst = (S) => S.level <= 1;
 
 // 따라 말하기: 잘하면 작은 팡파레
 async function repeatAfter(target) {
@@ -161,9 +188,8 @@ function cardsStep(S) {
       <div class="sentence">
         <p class="count">${k + 1} <span>/ ${cards.length}</span></p>
         <p class="ko ko-big" lang="ko">${esc(it.ko)}</p>
-        ${it.roman ? `<p class="say ${romanFirst(S) ? '' : 'later'}" id="roman">${esc(it.roman)}</p>` : ''}
+        ${it.roman ? romanLine(it.roman, 'roman') + romanSwitch() : ''}
         <p class="en">${esc(it.en)}</p>
-        ${it.roman && !romanFirst(S) ? '<button class="link-btn small" id="showRoman" type="button">Show romanization</button>' : ''}
       </div>
       <div class="listen-row">
         <button class="listen" id="play" type="button">${ICON.sound} Listen</button>
@@ -177,7 +203,7 @@ function cardsStep(S) {
       </div>
     </section>`);
     bindQuit(S);
-    on('showRoman', () => { $('roman').classList.remove('later'); $('showRoman').remove(); });
+    bindRoman();
     on('play', () => say(it.ko, S));
     on('slow', () => say(it.ko, S, 'play', true));
     on('mic', () => repeatAfter(it.ko));
@@ -211,7 +237,7 @@ function wordsStep(S) {
       ${part === 'read'
         ? `<div class="word-show">
              <p class="en ko-big" lang="ko">${esc(q.ko)}</p>
-             <p class="say ${romanFirst(S) ? '' : 'later'}" id="say">${esc(q.roman || '')}&nbsp;</p>
+             ${q.roman ? romanLine(q.roman, 'say') + romanSwitch() : ''}
              <div class="word-actions">
                <button class="ghost small-listen" id="play" type="button">${ICON.sound} Listen</button>
                ${canListen ? `<button class="ghost small-listen" id="mic" type="button">${ICON.mic} Say it</button>` : ''}
@@ -236,12 +262,12 @@ function wordsStep(S) {
         if (o.en === q.en) x.classList.add('right');
         else if (Number(x.dataset.j) === st.picked) x.classList.add('wrong');
       });
-      if ($('say')) $('say').classList.remove('later');
       $('hint').innerHTML = `${right ? 'Right! 👏 ' : 'The answer is '}<b lang="ko">${esc(q.ko)}</b> ${q.roman ? `<span class="muted">(${esc(q.roman)})</span> ` : ''}= ${esc(q.en)}`;
       $('qnext').disabled = false;
       if (fresh) { if (right) celebrate($('hint')); if (part === 'listen') say(q.ko, S); }
       spotlight($('qnext'), $('hint'), document.querySelector('.word-actions'), document.querySelector('.choices'));
     }
+    bindRoman();
     on('play', () => say(q.ko, S));
     on('mic', () => repeatAfter(q.ko));
     on('qprev', () => { if (qi > 0) question(part, qi - 1); else if (part === 'listen') question('read', words.length - 1); });
@@ -297,7 +323,7 @@ function qaStep(S) {
     else setTimeout(() => { if ($('again')) play(); }, 350);
     // 다시 하기: 클라우디아가 고쳐 준 문장(영어로 답했을 때는 한국어로 바꾼 문장)이 맨 앞에 골라져 있어요
     const list = q.extra ? [q.extra, ...q.choices.filter((c) => c.ko !== q.extra.ko)] : q.choices;
-    carousel($('qaChoices'), list.map((c) => ({ en: c.ko, ko: c.roman ? `${c.roman} · ${c.en}` : c.en, tag: c === q.extra ? 'Klaudia’s version' : '' })), {
+    carousel($('qaChoices'), list.map((c) => ({ en: c.ko, ko: c.roman && romanOn() ? `${c.roman} · ${c.en}` : c.en, tag: c === q.extra ? 'Klaudia’s version' : '' })), {
       action: 'Use this answer', soft: true, en: true,
       onListen: (c) => speak(c.en, { rate: S.rate }),
       onPick: (c) => answered(q, c.en, true),
@@ -338,7 +364,7 @@ function qaStep(S) {
     $('area').innerHTML = `<div class="feedback">
         <p class="label">You said</p><p class="en" lang="ko">${esc(text)}</p>
         ${r && r.better_ko && !same ? `<p class="label">${r.english ? 'In Korean you can say' : 'Klaudia’s version'}</p><p class="en better" lang="ko">${esc(r.better_ko)}</p>
-          ${r.better_roman ? `<p class="say">${esc(r.better_roman)}</p>` : ''}` : ''}
+          ${r.better_roman ? romanLine(r.better_roman) : ''}` : ''}
         ${r && r.better_en ? `<p class="muted">${esc(r.better_en)}</p>` : ''}
         ${r && r.tip_en ? `<p class="tip">💡 ${esc(r.tip_en)}</p>` : ''}
         ${!r ? '<p class="muted">Klaudia could not check this one, but let’s keep going.</p>' : ''}
@@ -349,6 +375,7 @@ function qaStep(S) {
         <button class="next" id="qaNext" type="button">${last ? 'Done' : 'Next'}</button>
       </div>`;
     if (r && r.good !== false && !r.english && tapped !== true) celebrate($('area').querySelector('.feedback'));
+    bindRoman();
     on('hearBetter', () => say(r.better_ko, S, 'hearBetter'));
     on('retry', () => {
       S.score.qa[1]--; if (!r || r.good !== false) S.score.qa[0]--;

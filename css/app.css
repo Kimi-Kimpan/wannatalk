@@ -1053,3 +1053,12 @@ body.sheet-open { overflow: hidden; }
 .ko-lesson .sugg-listen { align-self: flex-start; }
 .screen.fit.tighter.ko-lesson .sugg-listen { margin-top: 3px; padding: 2px 8px; font-size: 14px; }
 .screen.fit.tighter.ko-lesson .typed input, .screen.fit.tighter.ko-lesson .typed button { min-height: 44px; padding-top: 6px; padding-bottom: 6px; }
+/* 로마자: 흐리게 가리기 + 켜기/끄기 스위치 */
+.roman-line { cursor: pointer; transition: filter .2s; }
+.roman-line.blur { filter: blur(6px); user-select: none; }
+.roman-switch { display: inline-flex; align-items: center; gap: 8px; margin: 2px auto 4px; padding: 4px 8px; background: none; border: 0; color: var(--ink-soft); font-size: 14px; font-weight: 700; min-height: 32px; }
+.roman-switch .track { position: relative; width: 34px; height: 20px; border-radius: 999px; background: var(--line); transition: background .2s; }
+.roman-switch .knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .2s; }
+.roman-switch[aria-checked="true"] .track { background: var(--primary); }
+.roman-switch[aria-checked="true"] .knob { left: 16px; }
+.word-show .roman-switch, .sentence .roman-switch { display: flex; }
