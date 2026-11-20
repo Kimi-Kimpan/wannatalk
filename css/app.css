@@ -1062,3 +1062,15 @@ body.sheet-open { overflow: hidden; }
 .roman-switch[aria-checked="true"] .track { background: var(--primary); }
 .roman-switch[aria-checked="true"] .knob { left: 16px; }
 .word-show .roman-switch, .sentence .roman-switch { display: flex; }
+/* 한글 키보드: 로마자 · 글쇠 소리 힌트 스위치를 한 줄에 */
+.kb.no-sounds .kb-key small { visibility: hidden; }
+.kk-switches { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px 14px; margin: 0 0 4px; }
+.kk-switches .roman-switch { margin: 0; min-height: 28px; padding: 2px 4px; font-size: 13px; }
+.kk .say::before, .ko-lesson .say::before { content: "Say  "; font-size: 15px; }
+.kk .kk-body { flex-shrink: 0; }
+.screen.fit.tighter.kk .kk-body > .label { display: none; }
+.screen.fit.tighter.kk .kk-big { font-size: 52px; }
+.screen.fit.tighter.kk .kk-meaning { font-size: 24px; margin: 0; }
+.screen.fit.tighter.kk .kk-sound { font-size: 16px; }
+.screen.fit.tighter.kk #hear { min-height: 38px; padding: 4px 12px; }
+.screen.fit.tighter.kk .hint { min-height: 0; margin: 2px 0; }

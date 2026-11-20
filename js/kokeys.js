@@ -23,9 +23,41 @@ async function saveDone(n) {
 export const KEY_UNITS = UNITS;
 
 // 화면 키보드 (두벌식). 컴퓨터 자판으로 쳐도 같아요.
+// 로마자: 켜면 보이고, 끄면 흐리게 가려서 눌러야 보여요 (한국어 레슨과 함께 써요).
+// 처음에는 5단원(기본 자음·모음)을 마치기 전이면 켜짐, 마친 뒤면 꺼짐. 스위치로 바꾸면 그대로 기억해요.
+const RKEY = 'wt-ko-roman';
+export function romanOn() {
+  try { const v = localStorage.getItem(RKEY); if (v === 'on' || v === 'off') return v === 'on'; } catch (e) { /* 무시 */ }
+  return keysDone() < 5;
+}
+function setRomanOn(v) { try { localStorage.setItem(RKEY, v ? 'on' : 'off'); } catch (e) { /* 무시 */ } }
+export const romanLine = (text, id = '') => `<p class="say roman-line ${romanOn() ? '' : 'blur'}" ${id ? `id="${id}"` : ''} role="button" tabindex="0" aria-label="Romanization">${esc(text)}</p>`;
+const swHtml = (id, on1, label) => `<button class="roman-switch" id="${id}" type="button" role="switch" aria-checked="${on1}"><span class="track"><span class="knob"></span></span><span class="sw-label">${label} ${on1 ? 'on' : 'off'}</span></button>`;
+export const romanSwitch = () => swHtml('romanSw', romanOn(), 'Romanization');
+// 흐린 줄은 누르면 그 줄만 보여요. 스위치는 화면의 모든 줄에 바로 적용돼요.
+export function bindRoman() {
+  document.querySelectorAll('.roman-line').forEach((el) => {
+    const show = () => el.classList.remove('blur');
+    el.addEventListener('click', show);
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') show(); });
+  });
+  const sw = $('romanSw');
+  if (sw) sw.addEventListener('click', () => {
+    const v = !romanOn();
+    setRomanOn(v);
+    sw.setAttribute('aria-checked', String(v));
+    sw.querySelector('.sw-label').textContent = `Romanization ${v ? 'on' : 'off'}`;
+    document.querySelectorAll('.roman-line').forEach((el) => el.classList.toggle('blur', !v));
+  });
+}
+
+// 글쇠 아래 영어 소리 힌트 켜기/끄기 (기본: 켜짐)
+const KSKEY = 'wt-kb-sounds';
+function keySoundsOn() { try { return localStorage.getItem(KSKEY) !== 'off'; } catch (e) { return true; } }
+
 function keyboardHtml() {
   const key = ([k, a, b]) => `<button class="kb-key kb-${cv(a)}" type="button" data-k="${a}" ${b ? `data-s="${b}"` : ''} aria-label="${a}"><span class="kb-j">${a}</span><small lang="en">${roman(a)}</small></button>`;
-  return `<div class="kb" id="kb" lang="ko">
+  return `<div class="kb ${keySoundsOn() ? '' : 'no-sounds'}" id="kb" lang="ko">
     <div class="kb-row">${ROWS[0].map(key).join('')}</div>
     <div class="kb-row r2">${ROWS[1].map(key).join('')}</div>
     <div class="kb-row"><button class="kb-key kb-wide" id="kbShift" type="button" aria-label="Shift">⇧</button>${ROWS[2].map(key).join('')}<button class="kb-key kb-wide" id="kbBack" type="button" aria-label="Delete">⌫</button></div>
@@ -33,6 +65,14 @@ function keyboardHtml() {
 }
 function bindKeyboard(onKey) {
   let shift = false;
+  const ks = $('kbSoundSw');
+  if (ks) ks.addEventListener('click', () => {
+    const v = !keySoundsOn();
+    try { localStorage.setItem(KSKEY, v ? 'on' : 'off'); } catch (e) { /* 무시 */ }
+    ks.setAttribute('aria-checked', String(v));
+    ks.querySelector('.sw-label').textContent = `Key sounds ${v ? 'on' : 'off'}`;
+    $('kb').classList.toggle('no-sounds', !v);
+  });
   const paint = () => {
     $('kbShift').classList.toggle('on', shift);
     document.querySelectorAll('.kb-key[data-s]').forEach((b) => { const j = shift ? b.dataset.s : b.dataset.k; b.querySelector('.kb-j').textContent = j; b.querySelector('small').textContent = roman(j); });
@@ -129,7 +169,6 @@ register('ko-keys', (arg) => {
   function show() {
     const t = tasks[i];
     const p0 = t.kind === 'build' ? parts(t.target) : null;
-    const showRoman = t.kind === 'word' && u < 5;
     const body = t.kind === 'meet'
       ? `<p class="label">New letter</p>
          <div class="kk-big kk-${cv(t.target)}" lang="ko">${t.target}</div>
@@ -141,10 +180,11 @@ register('ko-keys', (arg) => {
          <p class="kk-sound" lang="ko">${[p0.cho, p0.jung, p0.jong].filter(Boolean).join(' + ')}</p>`
       : `<p class="label">Listen and type</p>
          <p class="kk-meaning">“${esc(t.meaning)}”</p>
-         <p class="kk-sound" id="roman">${showRoman ? esc(t.roman) : `<button class="link-btn" id="showRoman" type="button">Show how it sounds</button>`}</p>`;
+         ${t.roman ? romanLine(t.roman, 'roman') : ''}`;
     mount(`<section class="screen fit kk" lang="en">
       ${topBar(`Hangul · Unit ${u + 1}`, (i + 1) / (tasks.length + 1), 'Exit')}
       <div class="kk-body">${body}
+        <div class="kk-switches">${t.kind === 'word' && t.roman ? romanSwitch() : ''}${swHtml('kbSoundSw', keySoundsOn(), 'Key sounds')}</div>
         <button class="ghost small" id="hear" type="button">${ICON.sound} Listen</button>
       </div>
       <div class="kk-typed" id="typed" lang="ko" aria-live="polite"></div>
@@ -158,7 +198,7 @@ register('ko-keys', (arg) => {
     on('quit', quit);
     on('next', () => next());
     on('hear', () => speak(t.kind === 'meet' ? sayable(t.target) : t.target, { rate: 0.8, button: $('hear') }));
-    on('showRoman', () => { $('roman').textContent = t.roman; });
+    bindRoman();
     // 조립·글자 단계는 다음 글쇠를 처음부터 알려 주고, 낱말 단계는 'Show me'를 누르면 알려 줘요
     let guide = t.kind !== 'word';
     // Hint: 누를 글쇠를 빛나게 / 다시 누르면 숨겨요

@@ -3,42 +3,7 @@
 import { state, register, go, mount, on, $, esc, topBar, shuffle, today, loading, errorScreen, avatar, ICON, hear, celebrate, carousel, spotlight, clearSpotlight } from './ui.js';
 import { speak, prefetch, canListen } from './speech.js';
 import * as api from './api.js';
-import { keysDone } from './kokeys.js';
-
-// 로마자: 켜면 보이고, 끄면 흐리게 가려서 눌러야 보여요.
-// 처음에는 한글 키보드 과정 5단원(기본 자음·모음)을 마치기 전이면 켜짐, 마친 뒤면 꺼짐. 스위치로 바꾸면 그대로 기억해요.
-const RKEY = 'wt-ko-roman';
-function romanOn() {
-  try { const v = localStorage.getItem(RKEY); if (v === 'on' || v === 'off') return v === 'on'; } catch (e) { /* 무시 */ }
-  return keysDone() < 5;
-}
-function setRomanOn(v) { try { localStorage.setItem(RKEY, v ? 'on' : 'off'); } catch (e) { /* 무시 */ } }
-const romanLine = (text, id = '') => `<p class="say roman-line ${romanOn() ? '' : 'blur'}" ${id ? `id="${id}"` : ''} role="button" tabindex="0" aria-label="Romanization">${esc(text)}</p>`;
-const romanSwitch = () => `<button class="roman-switch" id="romanSw" type="button" role="switch" aria-checked="${romanOn()}"><span class="track"><span class="knob"></span></span>Romanization ${romanOn() ? 'on' : 'off'}</button>`;
-// 흐린 줄은 누르면 그 줄만 보여요. 스위치는 화면의 모든 줄에 바로 적용돼요.
-function bindRoman() {
-  document.querySelectorAll('.roman-line').forEach((el) => {
-    const show = () => el.classList.remove('blur');
-    el.addEventListener('click', show);
-    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') show(); });
-  });
-  const sw = $('romanSw');
-  if (sw) sw.addEventListener('click', () => {
-    const v = !romanOn();
-    setRomanOn(v);
-    sw.setAttribute('aria-checked', String(v));
-    sw.lastChild.textContent = `Romanization ${v ? 'on' : 'off'}`;
-    document.querySelectorAll('.roman-line').forEach((el) => el.classList.toggle('blur', !v));
-  });
-}
-
-const STEP_NAMES = { cards: 'Sentences', words: 'Words', qa: 'Q & A' };
-const RATE = { 1: 0.7, 2: 0.8, 3: 0.9 };
-const LEVEL_TEXT = {
-  1: ['I just learned Hangul', 'Very short sentences.'],
-  2: ['I know a little Korean', 'Short everyday sentences.'],
-  3: ['I can have simple chats', 'Longer sentences that join two ideas.'],
-};
+import { romanOn, romanLine, romanSwitch, bindRoman } from './kokeys.js';
 
 // 한글만 남겨서 글자 단위로 비교해요 (따라 말하기 점수)
 function koSimilarity(target, heard) {
@@ -262,7 +227,7 @@ function wordsStep(S) {
         if (o.en === q.en) x.classList.add('right');
         else if (Number(x.dataset.j) === st.picked) x.classList.add('wrong');
       });
-      $('hint').innerHTML = `${right ? 'Right! 👏 ' : 'The answer is '}<b lang="ko">${esc(q.ko)}</b> ${q.roman ? `<span class="muted">(${esc(q.roman)})</span> ` : ''}= ${esc(q.en)}`;
+      $('hint').innerHTML = `${right ? 'Right! 👏 ' : 'The answer is '}<b lang="ko">${esc(q.ko)}</b> ${q.roman && romanOn() ? `<span class="muted">(${esc(q.roman)})</span> ` : ''}= ${esc(q.en)}`;
       $('qnext').disabled = false;
       if (fresh) { if (right) celebrate($('hint')); if (part === 'listen') say(q.ko, S); }
       spotlight($('qnext'), $('hint'), document.querySelector('.word-actions'), document.querySelector('.choices'));
