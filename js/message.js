@@ -50,7 +50,7 @@ const T = {
     what: (n) => `What would you like to tell ${n}?`,
     topics: [['day', '☀️', 'Ask about the day'], ['weekend', '🗓️', 'Weekend plans'], ['dinner', '🍲', "What's for dinner?"], ['kids', '👶', 'Ask about the grandkids'], ['free', '✏️', 'Write freely']],
     preparing: 'Klaudia is getting ready to help…',
-    steps: { greet: 'Greeting', body: 'Main message', close: 'Closing' },
+    steps: { greet: 'Greeting', body: 'Main message', ask: 'Ask a question', close: 'Closing' },
     say: {
       greet: "Let's start with a greeting.<br>Pick one below, or tap the mic and say it.",
       body: 'Now say what you want to tell them, in one short sentence.',
@@ -297,7 +297,7 @@ async function writeMessage(to, topic, replyTo) {
   let si = 0;
   // 답장에서는 레슨과 똑같이 상대에게 하나 물어보는 단계가 있어요 (영어를 배우는 사람, 내 태그에 맞는 질문들)
   const okq = (x) => x && typeof x.en === 'string' && x.en.trim();
-  const asks = replyTo && lang() === 'ko' && plan && Array.isArray(plan.ask)
+  const asks = replyTo && (lang() === 'ko' || writesKorean()) && plan && Array.isArray(plan.ask)
     ? plan.ask.filter(okq).slice(0, 5).map((q) => ({ en: q.en.trim(), ko: `${q.label ? `[${String(q.label).trim()}] ` : ''}${q.ko || ''}`, plainKo: q.ko || '' })) : [];
   const FLOW = asks.length ? ['greet', 'body', 'ask', 'close'] : STEPS;
 
@@ -313,7 +313,9 @@ async function writeMessage(to, topic, replyTo) {
   }
   // 클라우디아가 하는 말 (답장일 때는 편지를 기억하고 어느 부분에 답할지 물어봐요)
   function klaudiaLine(step) {
-    if (step === 'ask') return `이번에는 ${esc(to.name || '')}님에게 궁금한 것을 하나 물어봐요. <b>뭐라고 물어볼까요?</b>`;
+    if (step === 'ask') return writesKorean()
+      ? `Now ask ${esc(to.name || 'them')} one question in Korean. <b>What would you like to ask?</b> You can say it in English.`
+      : `이번에는 ${esc(to.name || '')}님에게 궁금한 것을 하나 물어봐요. <b>뭐라고 물어볼까요?</b>`;
     if (step === 'body' && replyTo) return t.replyHint(lang() === 'ko' || writesKorean() ? points.map((x) => x.ko) : []);
     return t.say[step];
   }
@@ -371,7 +373,7 @@ async function writeMessage(to, topic, replyTo) {
     try {
       const r = await api.ai('compose', { ...base, mode: 'voice', step: step === 'ask' ? 'body' : step, said: said[0], draft: lines.map((x) => x.en) });
       if (!r || !r.en) throw new Error('empty');
-      compareScreen({ en: r.en, ko: r.ko || '', said: said[0] });
+      compareScreen({ en: r.en, ko: r.ko || '', roman: r.roman || '', said: said[0] });
     } catch (e) {
       if ($('hint')) $('hint').textContent = t.convertFail;
     }
@@ -411,7 +413,9 @@ async function writeMessage(to, topic, replyTo) {
         <p class="mine-line" ${korean ? '' : 'lang="en"'}>${d.mine}</p>
         <p class="label">${t.fixed}</p>
         <p class="fixed-line" lang="en">${d.fixed}</p>
-        ${x.ko ? `<p class="muted">${esc(x.ko)}</p>` : ''}
+        ${writesKorean() && hasHangul(x.en) ? `<button class="ghost small-listen how-read" id="howRead" type="button">${ICON.sound} How to read it</button>
+          <p class="say roman-line hidden" id="romanRead">${esc(x.roman || '')}</p>` : ''}
+        ${x.ko ? `${writesKorean() ? '<p class="label">Meaning</p>' : ''}<p class="muted">${esc(x.ko)}</p>` : ''}
         ${!d.changed ? `<p class="praise">${t.same}</p>` : ''}
       </div>
       <p class="hint" id="hint" aria-live="polite"></p>
@@ -420,6 +424,8 @@ async function writeMessage(to, topic, replyTo) {
         <button class="primary mid" id="useFixed" type="button">${t.useFixed}</button>
       </div>
       ${optionsFor(step).length ? `<button class="link-btn small" id="examples" type="button">${t.seeExamples}</button>` : ''}`, { compact: true });
+    // 클라우디아가 한국어로 바꿔 준 문장: 읽어 주고, 로마자로 읽는 법을 보여 줘요
+    on('howRead', () => { speak(x.en, { rate: 0.75, button: $('howRead') }); if (x.roman) $('romanRead').classList.remove('hidden'); });
     on('useFixed', () => { lines.push({ en: x.en, ko: x.ko || '', step: si }); next(); });
     on('examples', () => stepScreen());
     on('mic', () => speakNow(step));

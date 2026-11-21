@@ -698,7 +698,7 @@ The writer said (speech recognition, may be English or Korean, may have errors):
 
 If they said it in Korean: keep THEIR OWN words and word order as much as possible and fix only real mistakes (grammar, particles, spelling, ending). Do not rephrase what is already correct.
 If they said it in English: turn it into ONE short, simple Korean sentence (해요체).
-Return JSON: {"en": "the Korean sentence", "ko": "its English meaning"}`;
+Return JSON: {"en": "the Korean sentence", "ko": "its English meaning", "roman": "Revised Romanization of the Korean sentence, syllables joined by hyphens within a word (e.g. '반가워요' -> 'ban-ga-wo-yo')"}`;
     return await gemini(system, prompt, 0.3, 400, m);
   }
   const prompt = `${who}
@@ -710,10 +710,11 @@ Return JSON:
   "greet": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ],
   "body":  [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ],
   "close": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]${b.reply_to ? `,
-  "points": [ {"ko": "one thing in their message worth answering, as ONE short English sentence that starts with the sender's name (e.g. 'Yongho said he worked at the airport today.')", "body": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]} ]   // 1 to 4 points, each with 3 different short Korean answers` : ""}
+  "points": [ {"ko": "one thing in their message worth answering, as ONE short English sentence that starts with the sender's name (e.g. 'Yongho said he worked at the airport today.')", "body": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]} ],   // 1 to 4 points, each with 3 different short Korean answers
+  "ask": [ {"label": "short English label of the kind of question (e.g. 'Ask about his day', 'Ask about the weekend')", "en": "a short Korean question to the reader (해요체)", "ko": "its English meaning"} ]   // 3 or 4 different easy questions that fit their message and the reader's life` : ""}
 }
 The three options in each part should be clearly different.`;
-  return await gemini(system, prompt, 0.7, b.reply_to ? 2400 : 1200, m);
+  return await gemini(system, prompt, 0.7, b.reply_to ? 3200 : 1200, m);
 }
 
 async function compose(b: any, m?: Meter) {

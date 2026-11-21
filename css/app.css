@@ -1074,3 +1074,8 @@ body.sheet-open { overflow: hidden; }
 .screen.fit.tighter.kk .kk-sound { font-size: 16px; }
 .screen.fit.tighter.kk #hear { min-height: 38px; padding: 4px 12px; }
 .screen.fit.tighter.kk .hint { min-height: 0; margin: 2px 0; }
+/* 편지 쓰기(한국어): 클라우디아가 바꿔 준 문장 읽는 법 */
+.roman-line.hidden { display: none; }
+.compare .how-read { margin: 4px 0; }
+.compare .roman-line { margin: 2px 0 6px; }
+.compare .roman-line::before { content: "Say  "; font-size: 15px; }
