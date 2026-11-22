@@ -208,27 +208,27 @@ async function letterStep(S) {
   const editing = () => backTo !== false;
   const lines = () => rows.filter((r) => r.item).map((r) => r.item);
 
-  // 편지 내용에 따라 단계 수를 정해요: 앞쪽 절반은 낱말 조각, 뒤쪽 절반은 말하기
+  // 답장의 짜임: 인사 → 받은 편지에 대한 대답·공감(1~2줄) → 새 질문 하나 → 끝인사 (모두 합쳐 5줄까지)
+  // "푹 쉬세요" 같은 인사말에 일일이 답하지 않도록, 대답할 거리는 서버가 질문과 소식만 골라 줘요.
   function buildSteps() {
+    const opts = (arr) => (Array.isArray(arr) ? arr : []).filter(ok).slice(0, 3);
     const pts = plan && Array.isArray(plan.points) ? plan.points.filter((x) => x && x.ko && Array.isArray(x.body) && x.body.some(ok)) : [];
-    const list = pts.map((x) => ({ ko: x.ko, options: x.body.filter(ok).slice(0, 3) }));
-    const generic = [
-      { ko: `${fromName}님이 편지를 보냈어요.`, options: (plan && Array.isArray(plan.body) ? plan.body : []).filter(ok).slice(0, 3) },
-      { ko: '마지막으로 짧게 인사해요.', options: (plan && Array.isArray(plan.close) ? plan.close : []).filter(ok).slice(0, 3) },
-    ];
-    for (const g of generic) if (list.length < 2 && g.options.length) list.push(g);
-    if (!list.length) list.push({ ko: `${fromName}님에게 하고 싶은 말을 해 봐요.`, options: [{ en: 'Thank you for your letter.', ko: '편지 고마워요.' }] });
-    steps = list.slice(0, MAX_LINES - 1);   // 답장 문장은 질문까지 합쳐 다섯 개를 넘지 않게
-    const tilesN = Math.ceil(steps.length / 2);
-    steps.forEach((x, i) => {
-      x.mode = i < tilesN ? 'tiles' : 'speak';
-      // 낱말 조각 단계는 짧은 문장이 먼저 오게
-      if (x.mode === 'tiles') x.options = x.options.slice().sort((p, q) => nWords(p) - nWords(q));
-    });
-    // 마지막에 상대에게 하나 물어보는 단계 (안부, 주말 계획처럼 내 태그에 맞는 질문들)
     const asks = (plan && Array.isArray(plan.ask) ? plan.ask : []).filter(ok).slice(0, 5)
       .map((q) => ({ en: q.en.trim(), ko: `${q.label ? `[${String(q.label).trim()}] ` : ''}${q.ko || ''}`, plainKo: q.ko || '' }));
-    if (asks.length) steps.push({ ko: `이번에는 ${fromName}님에게 궁금한 것을 하나 물어봐요.`, options: asks, mode: 'speak', ask: true });
+    const greet = opts(plan && plan.greet);
+    const close = opts(plan && plan.close);
+    const middle = pts.map((x) => ({ ko: x.ko, options: opts(x.body) }));
+    if (!middle.length) {
+      const generic = opts(plan && plan.body);
+      middle.push({ ko: `${fromName}님에게 하고 싶은 말을 해 봐요.`, options: generic.length ? generic : [{ en: 'Thank you for your letter.', ko: '편지 고마워요.' }] });
+    }
+    const room = MAX_LINES - (greet.length ? 1 : 0) - (asks.length ? 1 : 0) - (close.length ? 1 : 0);
+    steps = [];
+    if (greet.length) steps.push({ say: `먼저 ${esc(fromName)}님에게 인사해요. <b>뭐라고 인사할까요?</b>`, options: greet, mode: 'tiles' });
+    middle.slice(0, Math.max(1, Math.min(2, room))).forEach((x, i) => steps.push({ ...x, mode: i === 0 ? 'tiles' : 'speak' }));
+    if (asks.length) steps.push({ ko: `이번에는 ${fromName}님에게 새로운 것을 하나 물어봐요.`, options: asks, mode: 'speak', ask: true });
+    if (close.length) steps.push({ say: `마지막으로 짧게 끝인사를 해요. <b>뭐라고 할까요?</b>`, options: close, mode: 'tiles' });
+    steps.forEach((x) => { if (x.mode === 'tiles') x.options = x.options.slice().sort((p, q) => nWords(p) - nWords(q)); });
     rows = steps.map((x, n) => ({ n, item: null }));
   }
 
@@ -264,7 +264,7 @@ async function letterStep(S) {
     pop.querySelector('#letterHear').addEventListener('click', (e) => speak(readable(L), { rate: S.rate, button: e.currentTarget }));
     bindLetterToggles(pop);
   }
-  const ask = (x) => `${esc(x.ko)} <b>${x.ask ? '뭐라고 물어볼까요?' : '뭐라고 답해 볼까요?'}</b>`;
+  const ask = (x) => x.say || `${esc(x.ko)} <b>${x.ask ? '뭐라고 물어볼까요?' : '뭐라고 답해 볼까요?'}</b>`;
   // 한 줄을 다 만들었어요: 요약에서 들어왔으면 그 줄을 바꾸고(덧붙이지 않아요) 요약으로
   function done(n, item) {
     clearSpotlight();
@@ -877,7 +877,7 @@ function qaStep(S) {
         <div class="bubble" id="bubble"><p class="en" lang="en">${esc(it.en)}</p><p class="ko">${esc(it.ko)}</p></div>
       </div>
       <button class="ghost again" id="again" type="button">${ICON.sound} 다시 듣기</button>
-      <button class="big primary" id="doneQa" type="button" style="margin-top:auto">마치기</button>
+      <button class="big primary" id="doneQa" type="button" style="margin-top:auto">${S.letter ? '다음' : '마치기'}</button>
     </section>`);
     bindQuit();
     on('again', () => emma(it.en, S));
@@ -1102,7 +1102,7 @@ function talkStep(S) {
   function showSkip() {
     if ($('skip')) return;
     const c = $('controls');
-    if (c) c.insertAdjacentHTML('afterend', `<button class="plain mid wide" id="skip" type="button">${timeUp ? '대답하지 않고 마치기' : '대화 건너뛰고 마치기'}</button>`);
+    if (c) c.insertAdjacentHTML('afterend', `<button class="plain mid wide" id="skip" type="button">${S.letter ? (timeUp ? '대답하지 않고 다음으로' : '대화 건너뛰고 다음으로') : (timeUp ? '대답하지 않고 마치기' : '대화 건너뛰고 마치기')}</button>`);
     on('skip', () => nextStep(S));
   }
 
@@ -1125,7 +1125,7 @@ function talkStep(S) {
     history.push({ role: 'emma', ...bye });
     showLatest();
     setHint('');
-    $('controls').innerHTML = '<button class="big primary wide" id="done" type="button">오늘 공부 마치기</button>';
+    $('controls').innerHTML = `<button class="big primary wide" id="done" type="button">${S.letter ? '다음' : '오늘 공부 마치기'}</button>`;
     on('done', () => nextStep(S));
     spotlight($('done'));
     emma(bye.en, S);

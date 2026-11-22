@@ -710,12 +710,20 @@ Return JSON:
   "greet": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ],
   "body":  [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ],
   "close": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]${b.reply_to ? `,
-  "points": [ {"ko": "one thing in their message worth answering, as ONE short English sentence that starts with the sender's name (e.g. 'Yongho said he worked at the airport today.')", "body": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]} ],   // 1 to 4 points, each with 3 different short Korean answers
+  "points": [ {"ko": "one thing in their message worth answering, as ONE short English sentence that starts with the sender's name (e.g. 'Yongho said he worked at the airport today.')", "body": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]} ],   // 1 or 2 points (the most important), each with 3 different short Korean answers
   "ask": [ {"label": "short English label of the kind of question (e.g. 'Ask about his day', 'Ask about the weekend')", "en": "a short Korean question to the reader (해요체)", "ko": "its English meaning"} ]   // 3 or 4 different easy questions that fit their message and the reader's life` : ""}
 }
-The three options in each part should be clearly different.`;
+The three options in each part should be clearly different.${b.reply_to ? RULE_REPLY : ""}`;
   return await gemini(system, prompt, 0.7, b.reply_to ? 3200 : 1200, m);
 }
+
+// 답장의 짜임 (영어로 쓰는 사람, 한국어로 쓰는 사람 모두)
+const RULE_REPLY = `
+A reply has this shape, at most 5 sentences: greeting → answer or empathy for what they wrote (1 or 2 sentences) → ONE new question → short goodbye.
+- "points" are ONLY real questions the sender asked the reader, or real news or feelings worth answering. NEVER make a point of greetings, "thank you for your letter", "how are you", "rest well", "take care", "have a good night" or other pleasantries: the greeting and goodbye lines already cover those.
+- The body answers of a point answer the question or show empathy for the news; they do not thank for the letter or wish them rest.
+- "ask" questions are NEW: not already asked in this letter exchange and not about resting or health pleasantries.
+- "close" is a short, warm goodbye; do not repeat a wish that the greeting or answers already said.`;
 
 async function compose(b: any, m?: Meter) {
   if (b.write_lang === "ko") return await composeKorean(b, m);
@@ -754,12 +762,12 @@ Return JSON:
   "body":  [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ],
   "close": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]${b.reply_to ? `,
   "letter_ko": "natural Korean translation of the message being replied to",
-  "points": [ {"ko": "one thing in their message worth answering, as ONE full natural Korean sentence that starts with the SENDER's name as the subject and says what the sender wrote: '<sender>님이 ...라고 했어요.' (e.g. 'Klara님이 두 사람도 오늘은 편히 쉬면 좋겠다고 했어요.'). Never write it from the learner's side and never leave out who said it.", "body": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]} ],   // one point per distinct thing in the message (1 to 4 points: the most important ones only), each with 3 different short one-sentence answers (max 8 words)
+  "points": [ {"ko": "one thing in their message worth answering, as ONE full natural Korean sentence that starts with the SENDER's name as the subject and says what the sender wrote: '<sender>님이 ...라고 했어요.' (e.g. 'Klara님이 두 사람도 오늘은 편히 쉬면 좋겠다고 했어요.'). Never write it from the learner's side and never leave out who said it.", "body": [ {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}, {"en": "...", "ko": "..."} ]} ],   // 1 or 2 points (the most important ones only), each with 3 different short one-sentence answers (max 8 words)
   "ask": [ {"label": "...", "en": "...?", "ko": "..."} ]   // 4 different short QUESTIONS the writer could ask the reader in this reply (max 8 words each), so the conversation keeps going.
            // "label" is a short Korean name for what it asks (e.g. '오늘 하루 안부 묻기', '주말 계획 묻기', '저녁 메뉴 묻기', '가족 안부 묻기', '자유롭게 묻기').
            // Choose subjects that fit the writer's background (family, grandchildren, hobbies, work) and this message. Do not ask what the message already answered.` : ""}
 }
-"ko" is the natural Korean meaning (polite). The three options in each part should be clearly different.`;
+"ko" is the natural Korean meaning (polite). The three options in each part should be clearly different.${b.reply_to ? RULE_REPLY : ""}`;
   return await gemini(system, prompt, 0.8, b.reply_to ? 2800 : 1200, m);
 }
 

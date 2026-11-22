@@ -263,7 +263,7 @@ export async function pendingLetter(uid) {
     .select('*')
     .eq('to_id', uid)
     .is('handled_at', null)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })   // 가장 최근 편지에 답해요 (답장하면 그 사람의 편지는 모두 읽음)
     .limit(1);
   return data && data[0] ? data[0] : null;
 }
