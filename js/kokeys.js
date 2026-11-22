@@ -199,8 +199,8 @@ register('ko-keys', (arg) => {
     on('next', () => next());
     on('hear', () => speak(t.kind === 'meet' ? sayable(t.target) : t.target, { rate: 0.8, button: $('hear') }));
     bindRoman();
-    // 조립·글자 단계는 다음 글쇠를 처음부터 알려 주고, 낱말 단계는 'Show me'를 누르면 알려 줘요
-    let guide = t.kind !== 'word';
+    // Hint는 기본 꺼짐. 모를 때만 잠깐 켜서 보고, 다음 문제에서는 다시 꺼져요 (새 글자 만나기는 자리를 알려 줘야 해서 켜짐)
+    let guide = t.kind === 'meet';
     // Hint: 누를 글쇠를 빛나게 / 다시 누르면 숨겨요
     const paintHint = () => { $('helpKey').classList.toggle('on', guide); $('helpKey').setAttribute('aria-pressed', String(guide)); };
     on('helpKey', () => { guide = !guide; paintHint(); refresh(); });
