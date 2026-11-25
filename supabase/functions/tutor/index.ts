@@ -688,6 +688,18 @@ async function composeKorean(b: any, m?: Meter) {
   const system = `You are Klaudia, helping an English speaker who is a BEGINNER learner of Korean write a very short, warm message in KOREAN to a Korean family member. ${learnerOf(b)}
 Every Korean line is short (max 8 words), uses everyday words and the polite 해요체 ending. Reply with JSON only.
 In every item, the key "en" holds the KOREAN sentence and the key "ko" holds its natural ENGLISH meaning.`;
+  if (b.mode === "free") {
+    const prompt = `${who}
+Topic: ${COMPOSE_TOPICS[topic]}${replyTo}
+The writer said their whole message in one go (speech recognition, may be English, Korean or a mix, may have errors and filler words): "${clip(b.said, 1500)}"
+
+Turn it into their message in simple Korean (해요체), at most 5 short sentences.
+- Keep THEIR content, order and voice. Do not add news, questions or feelings they did not say. Drop only filler words and repeats.
+- Korean parts: keep their own words and fix only real mistakes. English parts: put into short, simple Korean.
+- If they did not greet the reader at all, you may start with a short greeting using the reader's name.
+Return JSON: {"en": "the Korean message", "ko": "its natural English meaning", "roman": "Revised Romanization of the Korean message"}`;
+    return await gemini(system, prompt, 0.3, 1200, m);
+  }
   if (b.mode === "voice") {
     const step = STEP_TEXT[b.step] ? b.step : "body";
     const prompt = `${who}
@@ -737,6 +749,18 @@ async function compose(b: any, m?: Meter) {
   const draft = Array.isArray(b.draft) ? b.draft.slice(0, 4).map((x: unknown) => clip(x, 200)).join(" ") : "";
   const replyTo = b.reply_to ? `\nThe message being replied to: """${clip(b.reply_to, 800)}"""` : "";
   const system = `You are Klaudia, helping someone write a very short, warm message to family. ${rule} The whole message is only 2 or 3 short sentences. Reply with JSON only.`;
+  if (b.mode === "free") {
+    const prompt = `${who}
+Topic: ${COMPOSE_TOPICS[topic]}${replyTo}
+The writer said their whole message in one go (speech recognition, may be English, Korean or a mix, may have errors and filler words): "${clip(b.said, 1500)}"
+
+Turn it into their message in simple, natural English, at most 5 short sentences.
+- Keep THEIR content, order and voice. Do not add news, questions or feelings they did not say. Drop only filler words and repeats.
+- English parts: keep their own words and fix only real mistakes (grammar, tense, spelling). Korean parts: put into short, natural English.
+- If they did not greet the reader at all, you may start with a short greeting using the reader's name.
+Return JSON: {"en": "the English message", "ko": "natural Korean meaning (polite)"}`;
+    return await gemini(system, prompt, 0.3, 1200, m);
+  }
   if (b.mode === "voice") {
     const step = STEP_TEXT[b.step] ? b.step : "body";
     const point = b.point ? `\nThe writer is answering this part of the message: ${clip(b.point, 200)}` : "";

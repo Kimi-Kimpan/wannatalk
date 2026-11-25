@@ -22,7 +22,11 @@ const T = {
       ask: '',
       close: '마지막으로 끝인사를 해요.',
     },
-    pick: '이 문장 사용하기', mic: '말하기', skip: '건너뛰기', undo: '한 문장 지우기',
+    pick: '이 문장 사용하기', mic: '말하기', skip: '건너뛰기', undo: '한 문장 지우기', prevStep: '이전 단계',
+    freeGo: '편지를 한 번에 말로 써 보세요', freeLabel: '한 번에 말하기',
+    freeSay: (n) => `${n}님에게 하고 싶은 말을 <b>한 번에 쭉</b> 말해 주세요. 클라우디아가 들은 내용을 다듬어 편지로 보여 드려요. <b>한국어로 말해도 영어로 바꿔 드려요.</b>`,
+    freeWorking: '클라우디아가 편지로 다듬고 있어요…', freeTitle: '클라우디아가 다듬은 편지', freeAgain: '다시 말하기', freeUse: '이대로 쓰기',
+    freeFail: '편지로 다듬지 못했어요. 다시 말해 주세요.',
     draft: '지금까지 쓴 글', draftEmpty: '아직 비어 있어요',
     listening: '듣고 있어요… 한국어로 말해도 돼요', converting: '영어로 바꾸고 있어요…',
     converted: '클라우디아가 고쳐 봤어요. 비교해 보고 골라 주세요.',
@@ -56,7 +60,11 @@ const T = {
       body: 'Now say what you want to tell them, in one short sentence.',
       close: 'Finally, a short goodbye.',
     },
-    pick: 'Use this line', mic: 'Speak', skip: 'Skip', undo: 'Remove last line',
+    pick: 'Use this line', mic: 'Speak', skip: 'Skip', undo: 'Remove last line', prevStep: 'Back',
+    freeGo: 'Or say the whole message at once', freeLabel: 'Whole message',
+    freeSay: (n) => `Say everything you want to tell ${n} <b>in one go</b>. Klaudia will tidy it into a message for you to check.`,
+    freeWorking: 'Klaudia is turning it into a message…', freeTitle: "Klaudia's message", freeAgain: 'Say it again', freeUse: 'Use this',
+    freeFail: 'That did not work. Please say it again.',
     draft: 'Your message so far', draftEmpty: 'Nothing yet',
     listening: 'Listening…', converting: 'Writing it down…',
     converted: 'Klaudia tidied it up. Compare and choose.',
@@ -86,6 +94,8 @@ T.enk = {
   converting: 'Putting it into Korean…',
   converted: 'Klaudia kept your words and fixed only the mistakes. Compare and choose.',
   planFail: 'Could not get suggestions. Tap the mic and say it; Klaudia will write it in Korean.',
+  freeSay: (n) => `Say everything you want to tell ${n} <b>in one go</b>. <b>English is fine</b>: Klaudia will turn it into a short Korean message for you to check.`,
+  freeWorking: 'Klaudia is writing it in Korean…',
   replyHint: (ps) => ps.length ? `<b>You could answer:</b><br>${ps.slice(0, 2).map((x) => '· ' + esc(x)).join('<br>')}` : '<b>Answer their message in one short Korean sentence.</b>',
 };
 const tt = () => (writesKorean() ? T.enk : T[lang()]);
@@ -357,13 +367,74 @@ async function writeMessage(to, topic, replyTo) {
       ${compact ? '' : `<div class="emma-row">${avatar('sm')}<div class="bubble" id="bubble"><p class="ko-line">${klaudiaLine(step)}</p></div></div>`}
       ${noDraft ? '' : `<div class="draft-box" id="draftBox">
         <p class="label">${t.draft}${lines.length ? ` <button class="link-btn small" id="undo" type="button">${t.undo}</button>` : ''}</p>
-        ${lines.length ? `<p class="en" lang="en">${esc(lines.map((x) => x.en).join(' '))}</p>` : `<p class="muted">${t.draftEmpty}</p>`}
+        ${lines.length ? `<p class="en" lang="en">${esc(lines.map((x) => x.en).join(' '))}</p>` : `<p class="muted">${t.draftEmpty}</p>
+          ${canListen ? `<button class="link-btn free-go" id="freeGo" type="button">${t.freeGo} <span class="free-ico">${ICON.mic}</span> ›</button>` : ''}`}
       </div>`}
       ${inner}
     </section>`);
     on('quit', home);
     on('seeLetter', openLetter);
     on('undo', () => { const last = lines.pop(); if (last) si = last.step; stepScreen(); });
+    on('freeGo', () => freeTalk());
+  }
+
+  // 단계 없이 한 번에: 쭉 말하면 클라우디아가 다듬어 편지로 → 미리보기 → 고치고 보내기
+  function freeTalk() {
+    clearSpotlight();
+    mount(`<section class="screen fit compose" lang="${lang()}">
+      <div class="bar">
+        <button class="ghost" id="back" type="button">${t.back}</button>
+        <div class="step-label">${esc(t.freeLabel)}</div>
+      </div>
+      ${letterLink()}
+      <div class="emma-row">${avatar('sm')}<div class="bubble"><p class="ko-line">${t.freeSay(esc(to.name || ''))}</p></div></div>
+      <p class="hint" id="hint" aria-live="polite"></p>
+      <div class="compose-dock bottom"><span></span>
+        <button class="mic-round" id="mic" type="button" aria-label="${t.mic}">${ICON.mic}<span>${t.mic}</span></button>
+      <span></span></div>
+    </section>`);
+    on('back', () => stepScreen());
+    on('seeLetter', openLetter);
+    on('mic', async () => {
+      const said = await hear($('mic'), $('hint'), { listening: t.listening, lang: 'auto', silenceMs: 3500, maxMs: 90000 });
+      if (!said || !said[0] || !$('hint')) return;
+      $('hint').textContent = t.freeWorking;
+      $('mic').disabled = true;
+      try {
+        const r = await api.ai('compose', { ...base, mode: 'free', said: said[0] });
+        if (!r || !r.en) throw new Error('empty');
+        freePreview({ en: r.en, ko: r.ko || '', roman: r.roman || '', said: said[0] });
+      } catch (e) {
+        if ($('hint')) { $('hint').textContent = t.freeFail; $('mic').disabled = false; }
+      }
+    });
+  }
+  function freePreview(x) {
+    const sameLang = hasHangul(x.said) === hasHangul(x.en);
+    const d = sameLang ? wordDiff(x.said, x.en) : { mine: esc(x.said), fixed: esc(x.en), changed: true };
+    mount(`<section class="screen fit compose" lang="${lang()}">
+      <div class="bar">
+        <button class="ghost" id="quit" type="button">${t.exit}</button>
+        <div class="step-label">${esc(t.freeTitle)}</div>
+      </div>
+      <div class="compare free-compare" id="compare">
+        <p class="label">${t.mine}</p>
+        <p class="mine-line">${d.mine}</p>
+        <p class="label">${t.freeTitle}</p>
+        <p class="fixed-line" lang="en">${d.fixed}</p>
+        ${writesKorean() && hasHangul(x.en) ? `<button class="ghost small-listen how-read" id="howRead" type="button">${ICON.sound} How to read it</button>
+          <p class="say roman-line hidden" id="romanRead">${esc(x.roman || '')}</p>` : `<button class="ghost small-listen" id="howRead" type="button">${ICON.sound} ${t.listen}</button>`}
+        ${x.ko ? `<p class="label">${t.meaning}</p><p class="muted">${esc(x.ko)}</p>` : ''}
+      </div>
+      <div class="compare-actions">
+        <button class="mic plain mid" id="again" type="button">${ICON.mic} ${t.freeAgain}</button>
+        <button class="primary mid" id="useFree" type="button">${t.freeUse}</button>
+      </div>
+    </section>`);
+    on('quit', home);
+    on('howRead', () => { speak(x.en, { rate: 0.8, button: $('howRead') }); if ($('romanRead') && x.roman) $('romanRead').classList.remove('hidden'); });
+    on('again', () => freeTalk());
+    on('useFree', () => review(to, [{ en: x.en, ko: x.ko || '', step: 0 }], replyTo));
   }
 
   async function speakNow(step, opts) {
@@ -385,11 +456,13 @@ async function writeMessage(to, topic, replyTo) {
     frame(`<p class="hint" id="hint" aria-live="polite">${esc(plan ? '' : t.planFail)}</p>
       <div class="sugg-list bottom" id="opts"></div>
       <div class="compose-dock">
-        ${step === 'body' ? '<span></span>' : `<button class="round-ghost" id="skip" type="button">${t.skip}</button>`}
+        ${si > 0 ? `<button class="round-ghost" id="prevStep" type="button">${t.prevStep}</button>` : '<span></span>'}
         ${canListen ? `<button class="mic-round" id="mic" type="button" aria-label="${t.mic}">${ICON.mic}<span>${t.mic}</span></button>` : '<span></span>'}
-        <span></span>
+        <button class="round-ghost" id="skip" type="button">${t.skip}</button>
       </div>`);
     on('skip', () => next());
+    // 이전 단계로: 그 단계에서 쓴 줄부터 다시 써요
+    on('prevStep', () => { si = Math.max(0, si - 1); while (lines.length && lines[lines.length - 1].step >= si) lines.pop(); stepScreen(); });
     if (options.length) {
       carousel($('opts'), options, {
         action: t.pick,

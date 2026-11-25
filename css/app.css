@@ -1079,3 +1079,10 @@ body.sheet-open { overflow: hidden; }
 .compare .how-read { margin: 4px 0; }
 .compare .roman-line { margin: 2px 0 6px; }
 .compare .roman-line::before { content: "Say  "; font-size: 15px; }
+/* 편지 쓰기: 아래 줄 (이전 단계 · 말하기 · 건너뛰기) */
+.compose .compose-dock > :first-child { justify-self: start; }
+.compose .compose-dock > :last-child { justify-self: end; }
+.compose .compose-dock .round-ghost { font-size: 17px; min-height: 52px; padding: 0 8px; }
+.draft-box .free-go { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 17px; font-weight: 700; text-align: left; }
+.draft-box .free-go .free-ico svg { width: 18px; height: 18px; }
+.free-compare .fixed-line { white-space: pre-wrap; }
