@@ -434,7 +434,7 @@ async function writeMessage(to, topic, replyTo) {
     on('quit', home);
     on('howRead', () => { speak(x.en, { rate: 0.8, button: $('howRead') }); if ($('romanRead') && x.roman) $('romanRead').classList.remove('hidden'); });
     on('again', () => freeTalk());
-    on('useFree', () => review(to, [{ en: x.en, ko: x.ko || '', step: 0 }], replyTo));
+    on('useFree', () => review(to, [{ en: x.en, ko: x.ko || '', step: 0 }], replyTo, voiceFix));
   }
 
   async function speakNow(step, opts) {
@@ -504,47 +504,143 @@ async function writeMessage(to, topic, replyTo) {
     on('mic', () => speakNow(step));
   }
 
+  const voiceFix = (said, draft) => api.ai('compose', { ...base, mode: 'voice', step: 'body', said, draft });
   function next() {
     clearSpotlight();
     si++;
-    if (si >= FLOW.length) return review(to, lines, replyTo);
+    if (si >= FLOW.length) return review(to, lines, replyTo, voiceFix);
     stepScreen();
   }
   stepScreen();
 }
 
-// 4. 고치고 보내기 ---------------------------------------------------------------------
-function review(to, lines, replyTo) {
+// 4. 고치고 보내기: 문장마다 🎤(다시 말하기) · 수정(글 고치기, 순서 바꾸기) · 삭제, 아래에 '내용 추가하기'
+// (레슨 끝 답장의 요약 화면과 같은 모양이에요)
+const MAX_ROWS = 5;
+const SUM_T = {
+  ko: { title: '이렇게 보낼게요', speak: '다시 말하기', edit: '수정', del: '삭제', up: '▲ 위로', down: '▼ 아래로', save: '저장', cancel: '취소',
+    add: '＋ 내용 추가하기', full: (n) => `편지는 ${n}문장까지예요. 더 넣으려면 하나를 지워 주세요.`, empty: '비어 있어요 · 🎤를 누르거나 글로 적어 주세요',
+    type: '영어로 적어 주세요', use: '이 문장 쓰기', hearAll: '전체 듣기', listening: '듣고 있어요… 한국어로 말해도 돼요',
+    working: '고치고 있어요…', fail: '바꾸지 못했어요. 다시 말해 주세요.', newLine: '새 문장', heard: '들은 말', noLines: '보낼 문장이 없어요.' },
+  en: { title: 'Ready to send', speak: 'Say again', edit: 'Edit', del: 'Delete', up: '▲ Up', down: '▼ Down', save: 'Save', cancel: 'Cancel',
+    add: '＋ Add a line', full: (n) => `A message has up to ${n} lines. Delete one to add more.`, empty: 'Empty · tap 🎤 or type it',
+    type: 'Type in English', use: 'Use this', hearAll: 'Listen', listening: 'Listening…',
+    working: 'Fixing it…', fail: 'That did not work. Please say it again.', newLine: 'New line', heard: 'You said', noLines: 'There is nothing to send.' },
+};
+SUM_T.enk = { ...SUM_T.en, type: 'Type in Korean', listening: 'Listening… English is fine', working: 'Putting it into Korean…' };
+// 한 덩어리 글을 문장으로 나눠요
+function splitSentences(text) {
+  return String(text || '').replace(/\s+/g, ' ').trim().split(/(?<=[.!?。？！])\s+/).map((x) => x.trim()).filter(Boolean);
+}
+function review(to, lines, replyTo, voice = null) {
   const t = tt();
+  const st = writesKorean() ? SUM_T.enk : SUM_T[lang()];
   const learner = lang() === 'ko';
-  mount(`<section class="screen fit" lang="${lang()}">
-    <div class="bar">
-      <button class="ghost" id="quit" type="button">${t.exit}</button>
-      <div class="step-label">→ ${esc(to.name || '')}</div>
-    </div>
-    <h2>${t.reviewTitle}</h2>
-    <p class="muted">${t.reviewHelp}</p>
-    <textarea id="body" rows="5" lang="en" class="review-text" autocapitalize="sentences">${esc(lines.map((x) => x.en).join(' '))}</textarea>
-    ${learner && lines.some((x) => x.ko) ? `<p class="meaning"><span class="label">${t.meaning}</span> ${esc(lines.map((x) => x.ko).filter(Boolean).join(' '))}</p>` : ''}
-    <div class="row">
-      <button class="plain mid" id="play" type="button">${ICON.sound} ${t.listen}</button>
-      <button class="plain mid" id="again" type="button">${t.restart}</button>
-    </div>
-    <p class="msg" id="msg" role="alert"></p>
-    <button class="big primary bottom" id="send" type="button">${t.send}</button>
-  </section>`);
-  on('quit', home);
-  on('play', () => speak($('body').value, { rate: 0.85, button: $('play') }));
-  on('again', () => pickTopic(to));
-  on('send', async () => {
-    const body = $('body').value.replace(/\s+/g, ' ').trim().slice(0, 2000);
-    if (!body) { $('msg').textContent = t.empty; return; }
+  // 줄 만들기: 한 번에 말한 편지는 문장별로 나눠요 (뜻도 문장 수가 같으면 함께 나눠요)
+  const rows = [];
+  for (const x of lines) {
+    const ens = splitSentences(x.en);
+    const kos = splitSentences(x.ko);
+    ens.forEach((en, i) => rows.push({ en, ko: kos.length === ens.length ? kos[i] : (ens.length === 1 ? x.ko || '' : '') }));
+  }
+  rows.splice(MAX_ROWS);
+  const body = () => rows.map((r) => r.en.trim()).filter(Boolean).join(' ');
+
+  function render(editAt = -1, pending = null) {
+    clearSpotlight();
+    const full = rows.length >= MAX_ROWS;
+    mount(`<section class="screen fit letter-summary inbox-summary" lang="${lang()}">
+      <div class="bar">
+        <button class="ghost" id="quit" type="button">${t.exit}</button>
+        <div class="step-label">→ ${esc(to.name || '')}</div>
+      </div>
+      <h2>${st.title}</h2>
+      <div class="sum-list">${rows.map((r, i) => `<div class="sum-part ${i === editAt ? 'editing' : ''}">
+        <div class="sum-head"><span class="label">${i + 1}.</span>
+          <span class="sum-btns">
+            ${canListen ? `<button class="ghost sum-mic" type="button" data-i="${i}" aria-label="${i + 1}. ${st.speak}">${ICON.mic}</button>` : ''}
+            <button class="ghost sum-edit" type="button" data-i="${i}">${st.edit}</button>
+            <button class="ghost sum-del" type="button" data-i="${i}">${st.del}</button>
+          </span></div>
+        <div class="sum-text" id="sum${i}">${r.en ? `<p lang="en">${esc(r.en)}</p>${r.ko ? `<p class="muted sum-ko">${esc(r.ko)}</p>` : ''}` : `<p class="muted">${st.empty}</p>`}</div>
+        <p class="hint sum-hint" id="hint${i}" aria-live="polite"></p>
+      </div>`).join('')}
+        <button class="ghost sum-more" id="addLine" type="button" ${full ? 'disabled' : ''}>${st.add}</button>
+      </div>
+      <p class="msg" id="msg" role="alert">${full ? st.full(MAX_ROWS) : ''}</p>
+      <div class="nav bottom">
+        <button class="prev" id="hearAll" type="button">${ICON.sound} ${st.hearAll}</button>
+        <button class="next" id="send" type="button">${t.send}</button>
+      </div>
+    </section>`);
+    on('quit', home);
+    on('hearAll', () => speak(body(), { rate: 0.85, button: $('hearAll') }));
+    on('addLine', () => { if (rows.length < MAX_ROWS) { rows.push({ en: '', ko: '' }); render(rows.length - 1); } });
+    document.querySelectorAll('.sum-del').forEach((x) => x.addEventListener('click', () => { rows.splice(Number(x.dataset.i), 1); render(); }));
+    document.querySelectorAll('.sum-edit').forEach((x) => x.addEventListener('click', () => render(Number(x.dataset.i))));
+    document.querySelectorAll('.sum-mic').forEach((x) => x.addEventListener('click', () => speakRow(Number(x.dataset.i), x)));
+    if (pending) showPending(pending.i, pending.r);
+    else if (editAt >= 0 && rows[editAt]) editRow(editAt);
+    on('send', send);
+  }
+
+  // 🎤 그 문장을 다시 말하면 클라우디아가 고쳐서 보여 줘요 → '이 문장 쓰기'
+  async function speakRow(i, btn) {
+    if (!voice) return;
+    const said = await hear(btn, $(`hint${i}`), { listening: st.listening, lang: 'auto', silenceMs: 2200, ui: lang() === 'ko' && !writesKorean() ? 'ko' : 'en' });
+    if (!said || !said[0] || !$(`hint${i}`)) return;
+    $(`hint${i}`).textContent = st.working;
+    try {
+      const r = await voice(said[0], rows.filter((_, j) => j !== i).map((x) => x.en));
+      if (!r || !r.en) throw new Error('empty');
+      render(-1, { i, r: { ...r, said: said[0] } });
+    } catch (e) { if ($(`hint${i}`)) $(`hint${i}`).textContent = st.fail; }
+  }
+  function showPending(i, r) {
+    const korean = writesKorean() && hasHangul(r.en);
+    $(`sum${i}`).innerHTML = `<p class="label">${st.heard}</p><p class="muted">${esc(r.said)}</p>
+      <p class="label">${t.fixed}</p><p lang="en" class="fixed-line">${esc(r.en)}</p>
+      ${korean && r.roman ? `<p class="say roman-line">${esc(r.roman)}</p>` : ''}
+      ${r.ko ? `<p class="muted sum-ko">${esc(r.ko)}</p>` : ''}
+      <div class="sum-edit-row">
+        <button class="ghost" id="pHear" type="button">${ICON.sound}</button>
+        <button class="ghost" id="pCancel" type="button">${st.cancel}</button>
+        <button class="primary mid" id="pUse" type="button">${st.use}</button>
+      </div>`;
+    $(`sum${i}`).closest('.sum-part').classList.add('editing');
+    on('pHear', () => speak(r.en, { rate: 0.8, button: $('pHear') }));
+    on('pCancel', () => { if (!rows[i].en) rows.splice(i, 1); render(); });
+    on('pUse', () => { rows[i] = { en: r.en, ko: r.ko || '' }; render(); });
+    try { $(`sum${i}`).scrollIntoView({ block: 'nearest' }); } catch (e) { /* 무시 */ }
+  }
+  // 수정: 글로 고치고, ▲▼로 순서를 바꿔요
+  function editRow(i) {
+    $(`sum${i}`).innerHTML = `<textarea rows="2" lang="${writesKorean() ? 'ko' : 'en'}" id="ed${i}" placeholder="${esc(st.type)}">${esc(rows[i].en)}</textarea>
+      <div class="sum-edit-row">
+        <button class="ghost" id="up${i}" type="button" ${i === 0 ? 'disabled' : ''}>${st.up}</button>
+        <button class="ghost" id="down${i}" type="button" ${i === rows.length - 1 ? 'disabled' : ''}>${st.down}</button>
+        <button class="primary mid" id="ok${i}" type="button">${st.save}</button>
+      </div>`;
+    const keep = () => {
+      const v = $(`ed${i}`).value.replace(/\s+/g, ' ').trim();
+      rows[i] = { en: v, ko: rows[i].en === v ? rows[i].ko : '' };
+    };
+    const move = (d) => { keep(); const j = i + d; [rows[i], rows[j]] = [rows[j], rows[i]]; render(j); };
+    on(`up${i}`, () => move(-1));
+    on(`down${i}`, () => move(1));
+    on(`ok${i}`, () => { keep(); if (!rows[i].en) rows.splice(i, 1); render(); });
+    try { $(`sum${i}`).scrollIntoView({ block: 'nearest' }); $(`ed${i}`).focus(); } catch (e) { /* 무시 */ }
+  }
+
+  async function send() {
+    const text = body().slice(0, 2000);
+    if (!text) { $('msg').textContent = st.noLines; return; }
     $('send').disabled = true;
     $('msg').textContent = t.sending;
     try {
-      await api.sendLetter({ to_id: to.id, body, reply_to: replyTo ? replyTo.id : null, translateTo: to.learn_lang || 'en' });
+      await api.sendLetter({ to_id: to.id, body: text, reply_to: replyTo ? replyTo.id : null, translateTo: to.learn_lang || 'en' });
       api.markAllFrom(state.user.id, to.id).catch(() => {});
-      if (learner) api.addEntry({ kind: 'letter', prompt_en: replyTo ? replyTo.body : null, answer_en: body, answer_ko: lines.map((x) => x.ko).filter(Boolean).join(' ') }).catch(() => {});
+      if (learner) api.addEntry({ kind: 'letter', prompt_en: replyTo ? replyTo.body : null, answer_en: text, answer_ko: rows.map((x) => x.ko).filter(Boolean).join(' ') }).catch(() => {});
       mount(`<section class="screen center" lang="${lang()}">
         <div class="big-emoji" aria-hidden="true">✉️</div>
         <h1>${t.sent}</h1>
@@ -556,5 +652,6 @@ function review(to, lines, replyTo) {
       $('send').disabled = false;
       $('msg').textContent = t.sendFail;
     }
-  });
+  }
+  render();
 }

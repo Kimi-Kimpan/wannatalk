@@ -1086,3 +1086,13 @@ body.sheet-open { overflow: hidden; }
 .draft-box .free-go { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 17px; font-weight: 700; text-align: left; }
 .draft-box .free-go .free-ico svg { width: 18px; height: 18px; }
 .free-compare .fixed-line { white-space: pre-wrap; }
+/* 편지함 답장 요약: 문장별 🎤 · 수정 · 삭제 */
+.inbox-summary { gap: 8px; }
+.sum-btns .sum-mic svg { width: 20px; height: 20px; }
+.sum-btns .sum-mic.recording { background: var(--bad); color: #fff; }
+.sum-text .sum-ko { font-size: 16px; margin-top: 2px; }
+.sum-hint:empty { display: none; }
+.sum-part .fixed-line { font-weight: 700; }
+.inbox-summary[lang="en"] .say::before { content: "Say  "; font-size: 14px; }
+.sum-text .label { font-size: 14px; font-weight: 700; color: var(--ink-soft); margin: 4px 0 0; }
+.sum-text .sum-edit-row .ghost svg { width: 20px; height: 20px; }
